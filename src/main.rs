@@ -1,3 +1,4 @@
+use objc2_foundation::NSInteger;
 use std::cell::OnceCell;
 use objc2::rc::Retained;
 use objc2::{define_class, msg_send, sel, ClassType, DeclaredClass, MainThreadOnly, AnyThread};
@@ -22,26 +23,28 @@ use objc2_pdf_kit::{PDFView, PDFDocument, PDFThumbnailView, PDFDisplayMode};
 use crate::workspace_delegate::WorkspaceDelegate;
 
 
-define_class!(
-    #[unsafe(super(NSSplitView))]
-    #[name = "CustomSplitView"]
-    struct CustomSplitView;
 
-    impl CustomSplitView {
-        #[unsafe(method(dividerThickness))]
-        fn divider_thickness(&self) -> f64 {
-            12.0
-        }
-        
-        #[unsafe(method(drawDividerInRect:))]
-        fn draw_divider_in_rect(&self, mut rect: NSRect) {
-            rect.origin.x += (rect.size.width - 1.0) / 2.0;
-            rect.size.width = 1.0;
-            unsafe {
-                let color = objc2_app_kit::NSColor::separatorColor();
-                color.set();
-                objc2_app_kit::NSBezierPath::fillRect(rect);
-            }
+
+define_class!(
+    #[unsafe(super(NSSplitViewController))]
+    #[name = "CustomSplitViewController"]
+    struct CustomSplitViewController;
+
+    impl CustomSplitViewController {
+        #[unsafe(method(splitView:effectiveRect:forDrawnRect:ofDividerAtIndex:))]
+        #[allow(non_snake_case)]
+        fn splitView_effectiveRect_forDrawnRect_ofDividerAtIndex(
+            &self,
+            _split_view: &NSSplitView,
+            proposed_effective_rect: NSRect,
+            _drawn_rect: NSRect,
+            _divider_index: NSInteger,
+        ) -> NSRect {
+            let mut rect = proposed_effective_rect;
+            // Expand the invisible hit area by 5 points on each side
+            rect.origin.x -= 5.0;
+            rect.size.width += 10.0;
+            rect
         }
     }
 );
@@ -442,11 +445,8 @@ define_class!(
             
 
             // Split View Controller
-            let split_vc = NSSplitViewController::new(mtm);
-            
-            let custom_split_alloc: objc2::rc::Allocated<CustomSplitView> = unsafe { objc2::msg_send![CustomSplitView::class(), alloc] };
-            let custom_split: Retained<CustomSplitView> = unsafe { objc2::msg_send![custom_split_alloc, initWithFrame: rect] };
-            unsafe { split_vc.setView(&custom_split) };
+            let split_vc_alloc: objc2::rc::Allocated<CustomSplitViewController> = unsafe { objc2::msg_send![CustomSplitViewController::class(), alloc] };
+            let split_vc: Retained<CustomSplitViewController> = unsafe { objc2::msg_send![split_vc_alloc, init] };
 
 
             // PDF View
@@ -540,7 +540,8 @@ define_class!(
             }
             self.ivars().window.set(window).unwrap();
             self.ivars().pdf_view.set(pdf_view).unwrap();
-            self.ivars().split_vc.set(split_vc).unwrap();
+            let split_vc_base = unsafe { Retained::cast_unchecked::<NSSplitViewController>(split_vc) };
+            self.ivars().split_vc.set(split_vc_base).unwrap();
             
             let has_doc = unsafe { self.ivars().pdf_view.get().unwrap().document().is_some() };
             if has_doc {
