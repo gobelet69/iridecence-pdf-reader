@@ -28,3 +28,10 @@ Establish a stable baseline for UI rendering and reduce locking the main thread 
 - **Large Workspace** (10,000 PDFs): Application launches instantly without blocking. Root folder and nested folders expand perfectly via the new asynchronous data flow, rendering immediately once background I/O is finished. No main-thread stalls observed.
 - **Sidebar scrolling**: Smooth. Cached SF symbols maintain excellent FPS during rapid scrolls.
 
+
+
+### 3. State Management and Regression Fix
+- Identified a regression where the root directory appeared empty. `NSOutlineView` expects `reloadItem_reloadChildren` to be called with `None` for the root level.
+- Implemented robust `is_loading` and `is_loading_placeholder` state machines for `FileNode`.
+- When a folder begins loading, a temporary `Loading...` placeholder is instantaneously injected into the children array. This ensures `NSOutlineView` maintains the expansion triangle and keeps the directory expanded while asynchronous enumeration finishes.
+- Verified against a massive, strictly read-only MASTER directory. Real-world performance results: Zero UI stalls. Directories with thousands of PDFs lazily load in the background while the UI remains fluid.

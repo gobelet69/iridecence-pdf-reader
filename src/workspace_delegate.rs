@@ -27,13 +27,26 @@ define_class!(
     impl WorkspaceDelegate {
 
 
+
     #[unsafe(method(nodeDidLoadChildren:))]
     fn nodeDidLoadChildren(&self, notification: &objc2_foundation::NSNotification) {
         if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
             if let Some(outline_view) = weak_view.load() {
                 let node: objc2::rc::Retained<crate::workspace::FileNode> = unsafe { objc2::msg_send![notification, object] };
-                let node_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(node) };
-                unsafe { outline_view.reloadItem_reloadChildren(Some(&node_any), true) };
+                let mut is_root = false;
+                if let Some(root) = self.ivars().root_node.borrow().as_ref() {
+                    if std::ptr::eq(&**root, &*node) {
+                        is_root = true;
+                    }
+                }
+                
+                if is_root {
+                    unsafe { outline_view.reloadItem_reloadChildren(None, true) };
+                } else {
+                    let node_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(node) };
+                    unsafe { outline_view.reloadItem_reloadChildren(Some(&node_any), true) };
+                    unsafe { outline_view.expandItem(Some(&node_any)) }; // Keep expanded if it was expanded
+                }
             }
         }
     }
@@ -41,12 +54,22 @@ define_class!(
     #[unsafe(method(outlineViewSelectionDidChange:))]
     fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
         let outline_view: objc2::rc::Retained<NSOutlineView> = unsafe { objc2::msg_send![notification, object] };
+        let selected_row = unsafe { outline_view.selectedRow() };
+        if selected_row >= 0 {
+            if let Some(item) = unsafe { outline_view.itemAtRow(selected_row) } {
+                let node: &crate::workspace::FileNode = unsafe { &*(&*item as *const objc2::runtime::AnyObject as *const crate::workspace::FileNode) };
+                if node.ivars().is_loading_placeholder.get() {
+                    return;
+                }
+            }
+        }
         
         let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send![&outline_view, target] };
         if let Some(target) = target {
             let _: () = unsafe { objc2::msg_send![&target, workspaceSelectionChanged: &*outline_view] };
         }
     }
+
         #[unsafe(method(outlineView:numberOfChildrenOfItem:))]
         fn outlineView_numberOfChildrenOfItem(&self, _outline_view: &NSOutlineView, item: Option<&AnyObject>) -> NSInteger {
             let root_borrow = self.ivars().root_node.borrow();
@@ -129,7 +152,9 @@ define_class!(
             let symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
             
             if let Some(iv) = unsafe { table_cell.imageView() } {
-                if is_dir {
+                if node.ivars().is_loading_placeholder.get() {
+                    unsafe { iv.setImage(None) }; // No icon for loading placeholder
+                } else if is_dir {
                     unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemBlueColor())) };
                     if let Some(img) = self.ivars().folder_image.borrow().as_ref() {
                         unsafe { iv.setImage(Some(img)) };

@@ -14,6 +14,7 @@ pub struct FileNodeIvars {
     pub children: RefCell<Option<Vec<Retained<FileNode>>>>,
     pub is_loading: Cell<bool>,
     pub async_data: Arc<Mutex<Option<Vec<(String, String, bool)>>>>,
+    pub is_loading_placeholder: Cell<bool>,
 }
 
 define_class!(
@@ -58,6 +59,7 @@ impl FileNode {
         *node.ivars().name.borrow_mut() = name;
         node.ivars().is_dir.set(is_dir);
         node.ivars().is_loading.set(false);
+        node.ivars().is_loading_placeholder.set(false);
         *node.ivars().async_data.lock().unwrap() = None;
         node
     }
@@ -66,6 +68,10 @@ impl FileNode {
         if !self.ivars().is_dir.get() { return; }
         if self.ivars().children.borrow().is_some() || self.ivars().is_loading.get() { return; }
         self.ivars().is_loading.set(true);
+        
+        let placeholder = FileNode::new("".to_string(), "Loading...".to_string(), false);
+        placeholder.ivars().is_loading_placeholder.set(true);
+        *self.ivars().children.borrow_mut() = Some(vec![placeholder]);
 
         let path_str = self.ivars().path.borrow().clone();
         let async_data = self.ivars().async_data.clone();
