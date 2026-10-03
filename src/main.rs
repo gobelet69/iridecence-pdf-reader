@@ -59,6 +59,32 @@ define_class!(
             let zoom_in_id = objc2_foundation::ns_string!("ZoomIn");
             let zoom_out_id = objc2_foundation::ns_string!("ZoomOut");
             let search_id = objc2_foundation::ns_string!("Search");
+            let sidebar_tabs_id = objc2_foundation::ns_string!("SidebarTabs");
+            
+            if item_identifier.isEqualToString(sidebar_tabs_id) {
+                let item = unsafe { NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier) };
+                
+                let target_obj: &AnyObject = unsafe { &*(self as *const AppDelegate as *const AnyObject) };
+                let segmented_control = unsafe { NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
+                    &objc2_foundation::NSArray::from_slice(&[
+                        objc2_foundation::ns_string!("Workspace"),
+                        objc2_foundation::ns_string!("Document")
+                    ]),
+                    objc2_app_kit::NSSegmentSwitchTracking::SelectOne,
+                    Some(target_obj),
+                    Some(objc2::sel!(switchSidebar:)),
+                    mtm
+                ) };
+                unsafe { segmented_control.setSelected_forSegment(true, 0) };
+                unsafe { item.setView(Some(&segmented_control)) };
+                
+                let min_size = NSSize::new(140.0, 24.0);
+                let max_size = NSSize::new(200.0, 24.0);
+                unsafe { item.setMinSize(min_size) };
+                unsafe { item.setMaxSize(max_size) };
+                
+                return Retained::into_raw(item);
+            }
             
             if item_identifier.isEqualToString(zoom_in_id) {
                 let item = unsafe { NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier) };
@@ -103,6 +129,7 @@ define_class!(
                 let array = NSArray::from_slice(&[
                     objc2_app_kit::NSToolbarToggleSidebarItemIdentifier,
                     objc2_app_kit::NSToolbarFlexibleSpaceItemIdentifier,
+                    objc2_foundation::ns_string!("SidebarTabs"),
                     objc2_foundation::ns_string!("Search"),
                     objc2_foundation::ns_string!("ZoomOut"),
                     objc2_foundation::ns_string!("ZoomIn")
@@ -117,6 +144,7 @@ define_class!(
                 let array = NSArray::from_slice(&[
                     objc2_app_kit::NSToolbarToggleSidebarItemIdentifier,
                     objc2_app_kit::NSToolbarFlexibleSpaceItemIdentifier,
+                    objc2_foundation::ns_string!("SidebarTabs"),
                     objc2_foundation::ns_string!("Search"),
                     objc2_foundation::ns_string!("ZoomOut"),
                     objc2_foundation::ns_string!("ZoomIn")
@@ -315,6 +343,20 @@ define_class!(
                                     let url_str = url.path().unwrap().to_string();
                                     *self.ivars().pending_pdf_path.borrow_mut() = url_str.clone();
                                     let app_ptr = self as *const AppDelegate as usize;
+                                    let item_raw = Retained::into_raw(item.clone()) as usize;
+                                    let outline_raw = outline as *const _ as *mut NSOutlineView as usize;
+                                    let is_icloud = node.ivars().icloud_status.get() == 1 || node.ivars().icloud_status.get() == 2;
+                                    let icloud_node_ptr = if is_icloud { node as *const crate::workspace::FileNode as usize } else { 0 };
+                                    
+                                    if node.ivars().icloud_status.get() == 1 {
+                                        unsafe {
+                                            let fm = objc2_foundation::NSFileManager::defaultManager();
+                                            let mut err: *mut AnyObject = std::ptr::null_mut();
+                                            let _: bool = msg_send![&fm, startDownloadingUbiquitousItemAtURL: &*url, error: &mut err];
+                                        }
+                                        node.ivars().icloud_status.set(2);
+                                        node.ivars().download_progress.set(0.0);
+                                    }
                                     
                                     std::thread::spawn(move || {
                                         let t0 = std::time::Instant::now();
@@ -322,6 +364,66 @@ define_class!(
                                         // 2. Filesystem access latency check
                                         let _meta = std::fs::metadata(&url_str);
                                         let t1 = std::time::Instant::now();
+                                        
+                                        // Polling loop for iCloud
+                                        if icloud_node_ptr != 0 {
+                                            let node_ptr = icloud_node_ptr as *const crate::workspace::FileNode;
+                                            let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
+                                            loop {
+                                                let mut is_dl_val: *mut AnyObject = std::ptr::null_mut();
+                                                let mut error: *mut AnyObject = std::ptr::null_mut();
+                                                let key = unsafe { NSString::from_str("NSURLUbiquitousItemIsDownloadingKey") };
+                                                let ok: bool = unsafe { msg_send![&nsurl, getResourceValue: &mut is_dl_val, forKey: &*key, error: &mut error] };
+                                                
+                                                let mut still_dl = false;
+                                                if ok && !is_dl_val.is_null() {
+                                                    let is_dl: bool = unsafe { msg_send![is_dl_val, boolValue] };
+                                                    still_dl = is_dl;
+                                                }
+                                                
+                                                if still_dl {
+                                                    let mut prog_val: *mut AnyObject = std::ptr::null_mut();
+                                                    let key_prog = unsafe { NSString::from_str("NSURLUbiquitousItemPercentDownloadedKey") };
+                                                    let mut error2: *mut AnyObject = std::ptr::null_mut();
+                                                    let ok_prog: bool = unsafe { msg_send![&nsurl, getResourceValue: &mut prog_val, forKey: &*key_prog, error: &mut error2] };
+                                                    if ok_prog && !prog_val.is_null() {
+                                                        let p: f64 = unsafe { msg_send![prog_val, doubleValue] };
+                                                        unsafe { (*node_ptr).ivars().download_progress.set(p) };
+                                                    }
+                                                    
+                                                    // Trigger UI update
+                                                    let o_ptr = outline_raw as *mut NSOutlineView;
+                                                    let i_ptr = item_raw as *mut AnyObject;
+                                                    unsafe {
+                                                        let _: () = msg_send![o_ptr, performSelectorOnMainThread: objc2::sel!(reloadItem:), withObject: i_ptr, waitUntilDone: false];
+                                                    }
+                                                    
+                                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                                } else {
+                                                    let mut stat_val: *mut AnyObject = std::ptr::null_mut();
+                                                    let key_stat = unsafe { NSString::from_str("NSURLUbiquitousItemDownloadingStatusKey") };
+                                                    let mut error3: *mut AnyObject = std::ptr::null_mut();
+                                                    let ok_stat: bool = unsafe { msg_send![&nsurl, getResourceValue: &mut stat_val, forKey: &*key_stat, error: &mut error3] };
+                                                    if ok_stat && !stat_val.is_null() {
+                                                        let stat_str = stat_val as *mut NSString;
+                                                        let dl_id = unsafe { NSString::from_str("NSURLUbiquitousItemDownloadingStatusDownloaded") };
+                                                        let current_id = unsafe { NSString::from_str("NSURLUbiquitousItemDownloadingStatusCurrent") };
+                                                        let is_dl: bool = unsafe { msg_send![stat_str, isEqualToString: &*dl_id] };
+                                                        let is_cur: bool = unsafe { msg_send![stat_str, isEqualToString: &*current_id] };
+                                                        if is_dl || is_cur {
+                                                            unsafe { (*node_ptr).ivars().icloud_status.set(0) };
+                                                        }
+                                                    }
+                                                    
+                                                    let o_ptr = outline_raw as *mut NSOutlineView;
+                                                    let i_ptr = item_raw as *mut AnyObject;
+                                                    unsafe {
+                                                        let _: () = msg_send![o_ptr, performSelectorOnMainThread: objc2::sel!(reloadItem:), withObject: i_ptr, waitUntilDone: false];
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
                                         
                                         // 3. Init PDFDocument
                                         let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
@@ -512,7 +614,14 @@ define_class!(
             let thumb_view = unsafe { PDFThumbnailView::initWithFrame(PDFThumbnailView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
             unsafe {
                 thumb_view.setPDFView(Some(&pdf_view));
-                thumb_view.setThumbnailSize(NSSize::new(120.0, 160.0));
+                // Adaptive thumbnail sizes
+                thumb_view.setThumbnailSize(NSSize::new(140.0, 198.0));
+                
+                // We use msg_send! to bypass missing bindings in objc2_pdf_kit
+                let _: () = msg_send![&thumb_view, setMaximumNumberOfColumns: 1usize];
+                
+                // We can't reduce vertical spacing directly on PDFThumbnailView in standard AppKit easily, 
+                // but setting a suitable thumbnail size helps.
                 thumb_view.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
             }
 
@@ -552,20 +661,9 @@ define_class!(
             }
 
             let target_obj: &AnyObject = unsafe { &*(self as *const AppDelegate as *const AnyObject) };
-            let segmented_control = unsafe { NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
-                &objc2_foundation::NSArray::from_slice(&[
-                    objc2_foundation::ns_string!("Workspace"),
-                    objc2_foundation::ns_string!("Document")
-                ]),
-                objc2_app_kit::NSSegmentSwitchTracking::SelectOne,
-                Some(target_obj),
-                Some(objc2::sel!(switchSidebar:)),
-                mtm
-            ) };
-            unsafe { segmented_control.setSelected_forSegment(true, 0) };
             unsafe { thumb_view.setHidden(true) };
 
-            let sidebar_stack = unsafe { NSStackView::stackViewWithViews(&objc2_foundation::NSArray::from_slice(&[segmented_control.as_ref(), outline_scroll.as_ref(), thumb_view.as_ref()]), mtm) };
+            let sidebar_stack = unsafe { NSStackView::stackViewWithViews(&objc2_foundation::NSArray::from_slice(&[outline_scroll.as_ref(), thumb_view.as_ref()]), mtm) };
             sidebar_stack.setOrientation(objc2_app_kit::NSUserInterfaceLayoutOrientation::Vertical);
             unsafe { sidebar_stack.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable) };
             unsafe { sidebar_stack.setSpacing(0.0) };

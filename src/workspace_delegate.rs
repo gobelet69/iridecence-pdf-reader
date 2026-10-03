@@ -141,6 +141,19 @@ define_class!(
                     cell.addSubview(&text_field);
                     cell.setImageView(Some(&image_view));
                     cell.setTextField(Some(&text_field));
+                    
+                    let cloud_iv = objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
+                    let _: () = msg_send![&cloud_iv, setTag: 101isize];
+                    cloud_iv.setHidden(true);
+                    
+                    let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
+                    let _: () = msg_send![&progress, setTag: 102isize];
+                    progress.setHidden(true);
+                    progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
+                    progress.setControlSize(objc2_app_kit::NSControlSize::Small);
+                    
+                    cell.addSubview(&cloud_iv);
+                    cell.addSubview(&progress);
                 }
                 view = Some(unsafe { Retained::cast_unchecked::<NSView>(cell) });
             }
@@ -167,6 +180,41 @@ define_class!(
                 }
             }
             
+            let icloud_status = node.ivars().icloud_status.get();
+            let download_progress = node.ivars().download_progress.get();
+            
+            unsafe {
+                let cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = msg_send![&table_cell, viewWithTag: 101isize];
+                if let Some(civ) = cloud_iv {
+                    if icloud_status == 1 {
+                        civ.setHidden(false);
+                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("icloud.and.arrow.down"), None) {
+                            civ.setImage(Some(&img));
+                            civ.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor()));
+                        }
+                    } else {
+                        civ.setHidden(true);
+                    }
+                }
+                
+                let progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = msg_send![&table_cell, viewWithTag: 102isize];
+                if let Some(pi) = progress {
+                    if icloud_status == 2 {
+                        pi.setHidden(false);
+                        pi.startAnimation(None);
+                        if download_progress > 0.0 {
+                            pi.setIndeterminate(false);
+                            pi.setDoubleValue(download_progress);
+                        } else {
+                            pi.setIndeterminate(true);
+                        }
+                    } else {
+                        pi.setHidden(true);
+                        pi.stopAnimation(None);
+                    }
+                }
+            }
+            
             if let Some(tf) = unsafe { table_cell.textField() } {
                 let name_str = &node.ivars().name.borrow();
                 let path_str = &node.ivars().path.borrow();
@@ -182,7 +230,15 @@ impl WorkspaceDelegate {
 
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
-        unsafe { msg_send![super(this), init] }
+        let this: Retained<Self> = unsafe { msg_send![super(this), init] };
+        
+        let ws = unsafe { objc2_app_kit::NSWorkspace::sharedWorkspace() };
+        let folder_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
+        let doc_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("pdf")) };
+        
+        *this.ivars().folder_image.borrow_mut() = Some(folder_img);
+        *this.ivars().doc_image.borrow_mut() = Some(doc_img);
+        this
     }
 
     pub fn set_outline_view(&self, view: &objc2::rc::Retained<NSOutlineView>) {
