@@ -1,0 +1,142 @@
+use objc2_app_kit::{NSOutlineView, NSTableColumn, NSTableCellView, NSTextField, NSView, NSControl, NSUserInterfaceItemIdentification, NSResponder};
+use objc2::runtime::AnyObject;
+use crate::workspace::FileNode;
+use std::cell::RefCell;
+use objc2::rc::Retained;
+use objc2_foundation::{NSObject, NSObjectProtocol, NSInteger, NSRect, NSPoint, NSSize, MainThreadMarker, NSString};
+use objc2::{define_class, MainThreadOnly, DefinedClass, msg_send};
+
+#[derive(Default)]
+pub struct WorkspaceDelegateIvars {
+    pub root_node: RefCell<Option<Retained<FileNode>>>,
+}
+
+define_class!(
+    #[unsafe(super(NSResponder))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "WorkspaceDelegate"]
+    #[ivars = WorkspaceDelegateIvars]
+    pub struct WorkspaceDelegate;
+
+    unsafe impl NSObjectProtocol for WorkspaceDelegate {}
+
+    impl WorkspaceDelegate {
+    #[unsafe(method(outlineViewSelectionDidChange:))]
+    fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
+        let outline_view: objc2::rc::Retained<NSOutlineView> = unsafe { objc2::msg_send![notification, object] };
+        
+        let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send![&outline_view, target] };
+        if let Some(target) = target {
+            let _: () = unsafe { objc2::msg_send![&target, workspaceSelectionChanged: &*outline_view] };
+        }
+    }
+        #[unsafe(method(outlineView:numberOfChildrenOfItem:))]
+        fn outlineView_numberOfChildrenOfItem(&self, _outline_view: &NSOutlineView, item: Option<&AnyObject>) -> NSInteger {
+            let root_borrow = self.ivars().root_node.borrow();
+            let Some(root) = root_borrow.as_ref() else { return 0; };
+            
+            let node: &FileNode = match item {
+                Some(it) => {
+                    unsafe { &*(it as *const AnyObject as *const FileNode) }
+                },
+                None => {
+                    &**root
+                },
+            };
+            
+            node.load_children();
+            if let Some(children) = node.ivars().children.borrow().as_ref() {
+                children.len() as NSInteger
+            } else {
+                0
+            }
+        }
+
+        #[unsafe(method(outlineView:child:ofItem:))]
+        fn outlineView_child_ofItem(&self, _outline_view: &NSOutlineView, index: NSInteger, item: Option<&AnyObject>) -> *mut AnyObject {
+            let root_borrow = self.ivars().root_node.borrow();
+            let Some(root) = root_borrow.as_ref() else { return std::ptr::null_mut(); };
+            let node: &FileNode = match item {
+                Some(it) => unsafe { &*(it as *const AnyObject as *const FileNode) },
+                None => &**root,
+            };
+            
+            let children = node.ivars().children.borrow();
+            let child = &children.as_ref().unwrap()[index as usize];
+            let retained = unsafe { Retained::cast_unchecked::<AnyObject>(child.clone()) };
+            // Auto-release the pointer to return +0 to Objective-C
+            Retained::autorelease_ptr(retained)
+        }
+
+        #[unsafe(method(outlineView:isItemExpandable:))]
+        fn outlineView_isItemExpandable(&self, _outline_view: &NSOutlineView, item: &AnyObject) -> bool {
+            let node: &FileNode = unsafe { &*(item as *const AnyObject as *const FileNode) };
+            node.ivars().is_dir.get()
+        }
+
+        #[unsafe(method(outlineView:viewForTableColumn:item:))]
+        fn outlineView_viewForTableColumn_item(&self, outline_view: &NSOutlineView, _table_column: Option<&NSTableColumn>, item: &AnyObject) -> *mut NSView {
+            let node: &FileNode = unsafe { &*(item as *const AnyObject as *const FileNode) };
+            let mtm = MainThreadMarker::new().unwrap();
+            
+            let id = objc2_foundation::ns_string!("FileCell");
+            let mut view = unsafe { outline_view.makeViewWithIdentifier_owner(id, None) };
+            if view.is_none() {
+                let cell = unsafe { NSTableCellView::initWithFrame(NSTableCellView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 24.0))) };
+                unsafe { cell.setIdentifier(Some(id)) };
+                
+                let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(2.0, 4.0), NSSize::new(16.0, 16.0))) };
+                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(176.0, 18.0))) };
+                unsafe {
+                    text_field.setBezeled(false);
+                    text_field.setDrawsBackground(false);
+                    text_field.setEditable(false);
+                    text_field.setSelectable(false);
+                    
+                    let font = objc2_app_kit::NSFont::systemFontOfSize(13.0);
+                    text_field.setFont(Some(&font));
+                    text_field.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingMiddle);
+                    
+                    cell.addSubview(&image_view);
+                    cell.addSubview(&text_field);
+                    cell.setImageView(Some(&image_view));
+                    cell.setTextField(Some(&text_field));
+                }
+                view = Some(unsafe { Retained::cast_unchecked::<NSView>(cell) });
+            }
+            
+            let cell = view.unwrap();
+            let table_cell = unsafe { Retained::cast_unchecked::<NSTableCellView>(cell.clone()) };
+            
+            let is_dir = node.ivars().is_dir.get();
+            let symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
+            
+            if let Some(iv) = unsafe { table_cell.imageView() } {
+                let image = unsafe { objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(symbol_name, None) };
+                if let Some(image) = image {
+                    if is_dir {
+                        unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemBlueColor())) };
+                    } else {
+                        unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor())) };
+                    }
+                    unsafe { iv.setImage(Some(&image)) };
+                }
+            }
+            
+            if let Some(tf) = unsafe { table_cell.textField() } {
+                let name_str = &node.ivars().name.borrow();
+                let path_str = &node.ivars().path.borrow();
+                unsafe { tf.setStringValue(&NSString::from_str(name_str)) };
+                unsafe { table_cell.setToolTip(Some(&NSString::from_str(path_str))) };
+            }
+            Retained::autorelease_ptr(cell)
+        }
+    }
+);
+
+impl WorkspaceDelegate {
+    pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
+        unsafe { msg_send![super(this), init] }
+    }
+}
