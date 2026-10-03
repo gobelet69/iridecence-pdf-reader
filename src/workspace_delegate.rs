@@ -145,11 +145,11 @@ define_class!(
                     cell.setTextField(Some(&text_field));
                     
                     let cloud_iv = objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
-                    let _: () = msg_send![&cloud_iv, setTag: 101isize];
+                    unsafe { cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon"))) };
                     cloud_iv.setHidden(true);
                     
                     let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
-                    let _: () = msg_send![&progress, setTag: 102isize];
+                    unsafe { progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress"))) };
                     progress.setHidden(true);
                     progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
                     progress.setControlSize(objc2_app_kit::NSControlSize::Small);
@@ -186,7 +186,21 @@ define_class!(
             let download_progress = node.ivars().download_progress.get();
             
             unsafe {
-                let cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = objc2::msg_send_id![&table_cell, viewWithTag: 101isize];
+                let subviews = table_cell.subviews();
+                let mut cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = None;
+                let mut progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = None;
+                
+                for i in 0..subviews.count() {
+                    let v = subviews.objectAtIndex(i);
+                    if let Some(ident) = v.identifier() {
+                        if ident.isEqualToString(objc2_foundation::ns_string!("CloudIcon")) {
+                            cloud_iv = Some(Retained::cast_unchecked::<objc2_app_kit::NSImageView>(v.retain()));
+                        } else if ident.isEqualToString(objc2_foundation::ns_string!("DownloadProgress")) {
+                            progress = Some(Retained::cast_unchecked::<objc2_app_kit::NSProgressIndicator>(v.retain()));
+                        }
+                    }
+                }
+                
                 if let Some(civ) = cloud_iv {
                     if icloud_status == 1 {
                         civ.setHidden(false);
@@ -199,7 +213,6 @@ define_class!(
                     }
                 }
                 
-                let progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = objc2::msg_send_id![&table_cell, viewWithTag: 102isize];
                 if let Some(pi) = progress {
                     if icloud_status == 2 {
                         pi.setHidden(false);
