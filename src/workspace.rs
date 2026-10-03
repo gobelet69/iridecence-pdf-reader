@@ -59,7 +59,7 @@ impl FileNode {
     pub fn new(path: String, name: String, is_dir: bool) -> Retained<Self> {
         let this: objc2::rc::Allocated<Self> = unsafe { objc2::msg_send_id![Self::class(), alloc] };
         let this = this.set_ivars(FileNodeIvars::default());
-        let node: Retained<Self> = unsafe { msg_send![super(this), init] };
+        let node: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
         *node.ivars().path.borrow_mut() = path;
         *node.ivars().name.borrow_mut() = name;
         node.ivars().is_dir.set(is_dir);

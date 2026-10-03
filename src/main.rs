@@ -738,7 +738,7 @@ define_class!(
 impl AppDelegate {
     fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(AppDelegateIvars::default());
-        unsafe { msg_send![super(this), init] }
+        unsafe { objc2::msg_send_id![super(this), init] }
     }
 }
 

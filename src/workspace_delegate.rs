@@ -32,7 +32,8 @@ define_class!(
     fn nodeDidLoadChildren(&self, notification: &objc2_foundation::NSNotification) {
         if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
             if let Some(outline_view) = weak_view.load() {
-                let node: objc2::rc::Retained<crate::workspace::FileNode> = unsafe { objc2::msg_send![notification, object] };
+                let node: Option<objc2::rc::Retained<crate::workspace::FileNode>> = unsafe { objc2::msg_send_id![notification, object] };
+                let node = node.unwrap();
                 let mut is_root = false;
                 if let Some(root) = self.ivars().root_node.borrow().as_ref() {
                     if std::ptr::eq(&**root, &*node) {
@@ -53,7 +54,8 @@ define_class!(
 
     #[unsafe(method(outlineViewSelectionDidChange:))]
     fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
-        let outline_view: objc2::rc::Retained<NSOutlineView> = unsafe { objc2::msg_send![notification, object] };
+        let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send_id![notification, object] };
+        let outline_view = outline_view.unwrap();
         let selected_row = unsafe { outline_view.selectedRow() };
         if selected_row >= 0 {
             if let Some(item) = unsafe { outline_view.itemAtRow(selected_row) } {
@@ -64,7 +66,7 @@ define_class!(
             }
         }
         
-        let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send![&outline_view, target] };
+        let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send_id![&outline_view, target] };
         if let Some(target) = target {
             let _: () = unsafe { objc2::msg_send![&target, workspaceSelectionChanged: &*outline_view] };
         }
@@ -184,7 +186,7 @@ define_class!(
             let download_progress = node.ivars().download_progress.get();
             
             unsafe {
-                let cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = msg_send![&table_cell, viewWithTag: 101isize];
+                let cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = objc2::msg_send_id![&table_cell, viewWithTag: 101isize];
                 if let Some(civ) = cloud_iv {
                     if icloud_status == 1 {
                         civ.setHidden(false);
@@ -197,7 +199,7 @@ define_class!(
                     }
                 }
                 
-                let progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = msg_send![&table_cell, viewWithTag: 102isize];
+                let progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = objc2::msg_send_id![&table_cell, viewWithTag: 102isize];
                 if let Some(pi) = progress {
                     if icloud_status == 2 {
                         pi.setHidden(false);
@@ -230,7 +232,7 @@ impl WorkspaceDelegate {
 
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
-        let this: Retained<Self> = unsafe { msg_send![super(this), init] };
+        let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
         
         let ws = unsafe { objc2_app_kit::NSWorkspace::sharedWorkspace() };
         let folder_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
