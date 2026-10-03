@@ -130,6 +130,7 @@ define_class!(
                     objc2_app_kit::NSToolbarToggleSidebarItemIdentifier,
                     objc2_app_kit::NSToolbarFlexibleSpaceItemIdentifier,
                     objc2_foundation::ns_string!("SidebarTabs"),
+                    objc2_app_kit::NSToolbarFlexibleSpaceItemIdentifier,
                     objc2_foundation::ns_string!("Search"),
                     objc2_foundation::ns_string!("ZoomOut"),
                     objc2_foundation::ns_string!("ZoomIn")
@@ -145,6 +146,7 @@ define_class!(
                     objc2_app_kit::NSToolbarToggleSidebarItemIdentifier,
                     objc2_app_kit::NSToolbarFlexibleSpaceItemIdentifier,
                     objc2_foundation::ns_string!("SidebarTabs"),
+                    objc2_app_kit::NSToolbarFlexibleSpaceItemIdentifier,
                     objc2_foundation::ns_string!("Search"),
                     objc2_foundation::ns_string!("ZoomOut"),
                     objc2_foundation::ns_string!("ZoomIn")
@@ -565,7 +567,7 @@ define_class!(
             let style = NSWindowStyleMask::Titled 
                       | NSWindowStyleMask::Closable 
                       | NSWindowStyleMask::Resizable 
-                      | NSWindowStyleMask::Miniaturizable;
+                      | NSWindowStyleMask::Miniaturizable | NSWindowStyleMask::FullSizeContentView;
             
             let window = unsafe {
                 NSWindow::initWithContentRect_styleMask_backing_defer(
@@ -579,6 +581,7 @@ define_class!(
             
             window.setTitle(objc2_foundation::ns_string!("OxiReader"));
             window.center();
+            unsafe { window.setTitlebarAppearsTransparent(true) };
             
             // Toolbar (Liquid Glass Native)
             let toolbar = unsafe { NSToolbar::initWithIdentifier(NSToolbar::alloc(mtm), objc2_foundation::ns_string!("MainToolbar")) };
@@ -641,6 +644,9 @@ define_class!(
                 outline_view.setHeaderView(None);
                 outline_view.setRowHeight(24.0);
                 outline_view.setIntercellSpacing(NSSize::new(4.0, 0.0));
+                outline_view.setIndentationPerLevel(14.0);
+                outline_view.setIndentationMarkerFollowsCell(true);
+                let _: () = msg_send![&outline_view, setFloatsGroupRows: false];
 
                 
                 let delegate_ptr: *const WorkspaceDelegate = &*workspace_del;
