@@ -210,7 +210,7 @@ define_class!(
                             if let Some(view) = unsafe { scroll.documentView() } {
                                 if let Some(outline) = view.downcast_ref::<NSOutlineView>() { 
                                     println!("Reloading outline view!"); unsafe { outline.reloadData() };
-                                    unsafe { outline.expandItem_expandChildren(None, true) };
+                                    unsafe { outline.expandItem(None) };
                                 }
                             }
                         }
@@ -258,7 +258,7 @@ define_class!(
                             if let Some(view) = unsafe { scroll.documentView() } {
                                 if let Some(outline) = view.downcast_ref::<NSOutlineView>() { 
                                     unsafe { outline.reloadData() };
-                                    unsafe { outline.expandItem_expandChildren(None, true) };
+                                    unsafe { outline.expandItem(None) };
                                 }
                             }
                         }
