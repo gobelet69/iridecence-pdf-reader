@@ -476,6 +476,7 @@ define_class!(
             let _ = self.ivars().workspace_delegate.set(workspace_del.clone());
 
             let outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            workspace_del.set_outline_view(&outline_view);
             let column = unsafe { NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), objc2_foundation::ns_string!("MainColumn")) };
             unsafe {
                 column.setWidth(200.0);

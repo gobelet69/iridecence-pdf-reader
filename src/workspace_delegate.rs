@@ -184,4 +184,13 @@ impl WorkspaceDelegate {
         let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
         unsafe { msg_send![super(this), init] }
     }
+
+    pub fn set_outline_view(&self, view: &objc2::rc::Retained<NSOutlineView>) {
+        *self.ivars().outline_view.borrow_mut() = Some(objc2::rc::Weak::from(view));
+        unsafe {
+            let nc = objc2_foundation::NSNotificationCenter::defaultCenter();
+            let name = objc2_foundation::ns_string!("FileNodeDidLoadChildren");
+            nc.addObserver_selector_name_object(self, objc2::sel!(nodeDidLoadChildren:), Some(name), None);
+        }
+    }
 }
