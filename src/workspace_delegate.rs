@@ -52,127 +52,6 @@ define_class!(
         }
     }
 
-
-    #[unsafe(method(downloadItem:))]
-    fn download_item(&self, sender: Option<&objc2_app_kit::NSButton>) {
-        if let Some(btn) = sender {
-            if let Some(outline_view_weak) = self.ivars().outline_view.borrow().as_ref() {
-                if let Some(outline_view) = outline_view_weak.upgrade() {
-                    let row = unsafe { outline_view.rowForView(btn as *const _ as *const _) };
-                    if row >= 0 {
-                        if let Some(item) = unsafe { outline_view.itemAtRow(row) } {
-                            let node: &crate::workspace::FileNode = unsafe { &*(item as *const _ as *const crate::workspace::FileNode) };
-                            if node.ivars().icloud_status.get() == 1 {
-                                let path = node.ivars().path.borrow().clone();
-                                let node_ptr = objc2::rc::Retained::into_raw(node.retain()) as usize;
-                                std::thread::spawn(move || {
-                                    use objc2_foundation::{NSURL, NSString};
-                                    use objc2::msg_send;
-                                    unsafe {
-                                        let fm = msg_send_id![objc2::class!(NSFileManager), defaultManager];
-                                        let fm: objc2::rc::Retained<objc2::runtime::AnyObject> = fm;
-                                        let path_str = NSString::from_str(&path);
-                                        let url = NSURL::fileURLWithPath(&path_str);
-                                        let mut error: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
-                                        let ok: bool = msg_send![&fm, startDownloadingUbiquitousItemAtURL: &*url, error: &mut error];
-                                        if ok {
-                                            let node: &crate::workspace::FileNode = &*(node_ptr as *const crate::workspace::FileNode);
-                                            node.ivars().icloud_status.set(2);
-                                            node.ivars().download_progress.set(0.0);
-                                            
-                                            // Reload initially to show spinner
-                                            let weak_ov = outline_view_weak.clone();
-                                            mtm.spawn(move || {
-                                                unsafe {
-                                                    if let Some(ov) = weak_ov.upgrade() {
-                                                        ov.reloadItem(Some(node as *const _ as *const objc2::runtime::AnyObject));
-                                                    }
-                                                }
-                                            });
-
-                                            let weak_ov2 = outline_view_weak.clone();
-                                            std::thread::spawn(move || {
-                                                loop {
-                                                    std::thread::sleep(std::time::Duration::from_millis(200));
-                                                    let mut status_val: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
-                                                    let mut error: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
-                                                    
-                                                    let is_dl: bool = unsafe {
-                                                        let key_dl = NSString::from_str("NSURLUbiquitousItemIsDownloadingKey");
-                                                        let ok_dl: bool = msg_send![&url, getResourceValue: &mut status_val, forKey: &*key_dl, error: &mut error];
-                                                        if ok_dl && !status_val.is_null() {
-                                                            msg_send![status_val, boolValue]
-                                                        } else {
-                                                            false
-                                                        }
-                                                    };
-                                                    
-                                                    let has_dl: bool = unsafe {
-                                                        let key_has = NSString::from_str("NSURLUbiquitousItemDownloadingStatusKey");
-                                                        let ok_has: bool = msg_send![&url, getResourceValue: &mut status_val, forKey: &*key_has, error: &mut error];
-                                                        if ok_has && !status_val.is_null() {
-                                                            let cur = status_val as *mut NSString;
-                                                            let c_id = NSString::from_str("NSURLUbiquitousItemDownloadingStatusCurrent");
-                                                            msg_send![cur, isEqualToString: &*c_id]
-                                                        } else {
-                                                            false
-                                                        }
-                                                    };
-                                                    
-                                                    if has_dl {
-                                                        node.ivars().icloud_status.set(0); // Available locally
-                                                        mtm.spawn(move || {
-                                                            unsafe {
-                                                                if let Some(ov) = weak_ov2.upgrade() {
-                                                                    ov.reloadItem(Some(node as *const _ as *const objc2::runtime::AnyObject));
-                                                                }
-                                                            }
-                                                        });
-                                                        break;
-                                                    }
-                                                    
-                                                    if is_dl {
-                                                        unsafe {
-                                                            let mut prog_val: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
-                                                            let key_prog = NSString::from_str("NSURLUbiquitousItemPercentDownloadedKey");
-                                                            let ok_prog: bool = msg_send![&url, getResourceValue: &mut prog_val, forKey: &*key_prog, error: &mut error];
-                                                            if ok_prog && !prog_val.is_null() {
-                                                                let p: f64 = msg_send![prog_val, doubleValue];
-                                                                node.ivars().download_progress.set(p / 100.0);
-                                                                mtm.spawn(move || {
-                                                                    unsafe {
-                                                                        if let Some(ov) = weak_ov2.upgrade() {
-                                                                            ov.reloadItem(Some(node as *const _ as *const objc2::runtime::AnyObject));
-                                                                        }
-                                                                    }
-                                                                });
-                                                            }
-                                                        }
-                                                    } else {
-                                                        // Failed or stopped
-                                                        node.ivars().icloud_status.set(1);
-                                                        mtm.spawn(move || {
-                                                            unsafe {
-                                                                if let Some(ov) = weak_ov2.upgrade() {
-                                                                    ov.reloadItem(Some(node as *const _ as *const objc2::runtime::AnyObject));
-                                                                }
-                                                            }
-                                                        });
-                                                        break;
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     #[unsafe(method(outlineViewSelectionDidChange:))]
     fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
         let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send_id![notification, object] };
@@ -249,7 +128,7 @@ define_class!(
                 unsafe { cell.setIdentifier(Some(id)) };
                 
                 let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(2.0, 4.0), NSSize::new(16.0, 16.0))) };
-                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(152.0, 18.0))) };
+                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(176.0, 18.0))) };
                 unsafe {
                     text_field.setBezeled(false);
                     text_field.setDrawsBackground(false);
@@ -265,19 +144,9 @@ define_class!(
                     cell.setImageView(Some(&image_view));
                     cell.setTextField(Some(&text_field));
                     
-                    let cloud_btn = objc2_app_kit::NSButton::initWithFrame(objc2_app_kit::NSButton::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
-                    unsafe { cloud_btn.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon"))) };
-                    cloud_btn.setHidden(true);
-                    unsafe {
-                        cloud_btn.setButtonType(objc2_app_kit::NSButtonType::MomentaryChange);
-                        cloud_btn.setBezelStyle(objc2_app_kit::NSBezelStyle::Inline);
-                        cloud_btn.setBordered(false);
-                        cloud_btn.setTitle(objc2_foundation::ns_string!(""));
-                        cloud_btn.setImagePosition(objc2_app_kit::NSCellImagePosition::ImageOnly);
-                        let target: &objc2::runtime::AnyObject = &*(self as *const WorkspaceDelegate as *const objc2::runtime::AnyObject);
-                        cloud_btn.setTarget(Some(target));
-                        cloud_btn.setAction(Some(objc2::sel!(downloadItem:)));
-                    }
+                    let cloud_iv = objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
+                    unsafe { cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon"))) };
+                    cloud_iv.setHidden(true);
                     
                     let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
                     unsafe { progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress"))) };
@@ -285,7 +154,7 @@ define_class!(
                     progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
                     progress.setControlSize(objc2_app_kit::NSControlSize::Small);
                     
-                    cell.addSubview(&cloud_btn);
+                    cell.addSubview(&cloud_iv);
                     cell.addSubview(&progress);
                 }
                 view = Some(unsafe { Retained::cast_unchecked::<NSView>(cell) });
@@ -318,30 +187,29 @@ define_class!(
             
             unsafe {
                 let subviews = table_cell.subviews();
-                let mut cloud_btn: Option<Retained<objc2_app_kit::NSButton>> = None;
+                let mut cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = None;
                 let mut progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = None;
                 
                 for i in 0..subviews.count() {
                     let v = subviews.objectAtIndex(i);
                     if let Some(ident) = v.identifier() {
                         if ident.isEqualToString(objc2_foundation::ns_string!("CloudIcon")) {
-                            cloud_btn = Some(Retained::cast_unchecked::<objc2_app_kit::NSButton>(v.clone()));
+                            cloud_iv = Some(Retained::cast_unchecked::<objc2_app_kit::NSImageView>(v.clone()));
                         } else if ident.isEqualToString(objc2_foundation::ns_string!("DownloadProgress")) {
                             progress = Some(Retained::cast_unchecked::<objc2_app_kit::NSProgressIndicator>(v.clone()));
                         }
                     }
                 }
                 
-                if let Some(btn) = cloud_btn {
+                if let Some(civ) = cloud_iv {
                     if icloud_status == 1 {
-                        btn.setHidden(false);
+                        civ.setHidden(false);
                         if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("icloud.and.arrow.down"), None) {
-                            btn.setImage(Some(&img));
-                            unsafe { btn.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor())) };
-                            unsafe { btn.setToolTip(Some(objc2_foundation::ns_string!("Not downloaded. Click to download."))) };
+                            civ.setImage(Some(&img));
+                            civ.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor()));
                         }
                     } else {
-                        btn.setHidden(true);
+                        civ.setHidden(true);
                     }
                 }
                 
