@@ -2,6 +2,7 @@ use objc2_app_kit::{NSOutlineView, NSTableColumn, NSTableCellView, NSTextField, 
 use objc2::runtime::AnyObject;
 use crate::workspace::FileNode;
 use std::cell::RefCell;
+use objc2::rc::Weak;
 use objc2::rc::Retained;
 use objc2_foundation::{NSObject, NSObjectProtocol, NSInteger, NSRect, NSPoint, NSSize, MainThreadMarker, NSString};
 use objc2::{define_class, MainThreadOnly, DefinedClass, msg_send};
@@ -9,6 +10,9 @@ use objc2::{define_class, MainThreadOnly, DefinedClass, msg_send};
 #[derive(Default)]
 pub struct WorkspaceDelegateIvars {
     pub root_node: RefCell<Option<Retained<FileNode>>>,
+    pub outline_view: RefCell<Option<Weak<NSOutlineView>>>,
+    pub folder_image: RefCell<Option<Retained<objc2_app_kit::NSImage>>>,
+    pub doc_image: RefCell<Option<Retained<objc2_app_kit::NSImage>>>,
 }
 
 define_class!(
@@ -21,6 +25,19 @@ define_class!(
     unsafe impl NSObjectProtocol for WorkspaceDelegate {}
 
     impl WorkspaceDelegate {
+
+
+    #[unsafe(method(nodeDidLoadChildren:))]
+    fn nodeDidLoadChildren(&self, notification: &objc2_foundation::NSNotification) {
+        if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
+            if let Some(outline_view) = weak_view.load() {
+                let node: objc2::rc::Retained<crate::workspace::FileNode> = unsafe { objc2::msg_send![notification, object] };
+                let node_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(node) };
+                unsafe { outline_view.reloadItem_reloadChildren(Some(&node_any), true) };
+            }
+        }
+    }
+
     #[unsafe(method(outlineViewSelectionDidChange:))]
     fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
         let outline_view: objc2::rc::Retained<NSOutlineView> = unsafe { objc2::msg_send![notification, object] };
@@ -112,14 +129,16 @@ define_class!(
             let symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
             
             if let Some(iv) = unsafe { table_cell.imageView() } {
-                let image = unsafe { objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(symbol_name, None) };
-                if let Some(image) = image {
-                    if is_dir {
-                        unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemBlueColor())) };
-                    } else {
-                        unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor())) };
+                if is_dir {
+                    unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemBlueColor())) };
+                    if let Some(img) = self.ivars().folder_image.borrow().as_ref() {
+                        unsafe { iv.setImage(Some(img)) };
                     }
-                    unsafe { iv.setImage(Some(&image)) };
+                } else {
+                    unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor())) };
+                    if let Some(img) = self.ivars().doc_image.borrow().as_ref() {
+                        unsafe { iv.setImage(Some(img)) };
+                    }
                 }
             }
             
@@ -135,6 +154,7 @@ define_class!(
 );
 
 impl WorkspaceDelegate {
+
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
         unsafe { msg_send![super(this), init] }
