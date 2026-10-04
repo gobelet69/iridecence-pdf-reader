@@ -128,7 +128,7 @@ define_class!(
                 unsafe { cell.setIdentifier(Some(id)) };
                 
                 let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(2.0, 4.0), NSSize::new(16.0, 16.0))) };
-                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(176.0, 18.0))) };
+                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(156.0, 18.0))) };
                 unsafe {
                     text_field.setBezeled(false);
                     text_field.setDrawsBackground(false);
@@ -138,19 +138,32 @@ define_class!(
                     let font = objc2_app_kit::NSFont::systemFontOfSize(13.0);
                     text_field.setFont(Some(&font));
                     text_field.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingMiddle);
+                    text_field.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
                     
                     cell.addSubview(&image_view);
                     cell.addSubview(&text_field);
                     cell.setImageView(Some(&image_view));
                     cell.setTextField(Some(&text_field));
                     
-                    let cloud_iv = objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
-                    unsafe { cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon"))) };
-                    cloud_iv.setHidden(true);
+                    let cloud_iv = unsafe { objc2_app_kit::NSButton::initWithFrame(objc2_app_kit::NSButton::alloc(mtm), NSRect::new(NSPoint::new(180.0, 4.0), NSSize::new(16.0, 16.0))) };
+                    unsafe {
+                        cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon")));
+                        cloud_iv.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin);
+                        cloud_iv.setHidden(true);
+                        cloud_iv.setBezelStyle(objc2_app_kit::NSBezelStyle::Inline);
+                        cloud_iv.setBordered(false);
+                        cloud_iv.setTitle(objc2_foundation::ns_string!(""));
+                        cloud_iv.setImagePosition(objc2_app_kit::NSCellImagePosition::ImageOnly);
+                        
+                        let target: &objc2::runtime::AnyObject = &*(self as *const WorkspaceDelegate as *const objc2::runtime::AnyObject);
+                        cloud_iv.setTarget(Some(target));
+                        cloud_iv.setAction(Some(objc2::sel!(downloadItem:)));
+                    }
                     
-                    let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(176.0, 4.0), NSSize::new(16.0, 16.0)));
+                    let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(180.0, 4.0), NSSize::new(16.0, 16.0)));
                     unsafe { progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress"))) };
                     progress.setHidden(true);
+                    progress.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin);
                     progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
                     progress.setControlSize(objc2_app_kit::NSControlSize::Small);
                     
@@ -238,6 +251,53 @@ define_class!(
             }
             Retained::autorelease_ptr(cell)
         }
+        #[unsafe(method(downloadItem:))]
+        fn download_item(&self, sender: &objc2_app_kit::NSButton) {
+            unsafe {
+                use objc2::msg_send;
+                use objc2::runtime::AnyObject;
+                use objc2_app_kit::{NSOutlineView, NSView};
+                
+                let mut view: *mut NSView = sender as *const _ as *mut NSView;
+                view = msg_send![view, superview];
+                
+                let mut outline_view: *mut NSOutlineView = std::ptr::null_mut();
+                let mut current = view;
+                while !current.is_null() {
+                    let is_outline: bool = msg_send![current, isKindOfClass: objc2::class!(NSOutlineView)];
+                    if is_outline {
+                        outline_view = current as *mut NSOutlineView;
+                        break;
+                    }
+                    current = msg_send![current, superview];
+                }
+                
+                if !outline_view.is_null() {
+                    let row: isize = msg_send![outline_view, rowForView: view];
+                    if row >= 0 {
+                        let item: *mut AnyObject = msg_send![outline_view, itemAtRow: row];
+                        if !item.is_null() {
+                            let node: &crate::workspace::FileNode = &*(item as *const AnyObject as *const crate::workspace::FileNode);
+                            if node.ivars().icloud_status.get() == 1 || node.ivars().icloud_status.get() == 4 {
+                                node.ivars().icloud_status.set(2);
+                                node.ivars().download_progress.set(0.0);
+                                let _: () = msg_send![outline_view, reloadItem: item, reloadChildren: false];
+                                
+                                let url_str = node.ivars().path.borrow().clone();
+                                let item_retained = objc2::rc::Retained::retain(item).unwrap();
+                                let item_raw = objc2::rc::Retained::into_raw(item_retained) as usize;
+                                let outline_raw = outline_view as usize;
+                                let node_ptr = node as *const crate::workspace::FileNode as usize;
+                                
+                                std::thread::spawn(move || {
+                                    crate::download_file(url_str, item_raw, outline_raw, node_ptr);
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 );
 
@@ -264,4 +324,5 @@ impl WorkspaceDelegate {
             nc.addObserver_selector_name_object(self, objc2::sel!(nodeDidLoadChildren:), Some(name), None);
         }
     }
+
 }

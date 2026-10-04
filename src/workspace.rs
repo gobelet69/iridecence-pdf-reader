@@ -17,6 +17,7 @@ pub struct FileNodeIvars {
     pub icloud_status: Cell<u8>,
     pub download_progress: Cell<f64>,
     pub is_loading_placeholder: Cell<bool>,
+    pub last_status_check: Cell<f64>,
 }
 
 define_class!(
@@ -66,6 +67,7 @@ impl FileNode {
         node.ivars().is_loading.set(false);
         node.ivars().is_loading_placeholder.set(false);
         node.ivars().icloud_status.set(0);
+        node.ivars().last_status_check.set(0.0);
         node.ivars().download_progress.set(0.0);
         *node.ivars().async_data.lock().unwrap() = None;
         node
