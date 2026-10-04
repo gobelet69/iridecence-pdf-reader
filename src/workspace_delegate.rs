@@ -214,12 +214,24 @@ define_class!(
                     }
                 }
                 
+                
+                let diag_state = if icloud_status == 0 { "Local" } else if icloud_status == 1 { "CloudOnly" } else if icloud_status == 2 { "Downloading" } else if icloud_status == 4 { "Failed" } else { "Unknown" };
+                let diag_icon = if icloud_status == 0 { "NONE" } else if icloud_status == 1 { "Cloud" } else if icloud_status == 2 { "Spinner" } else if icloud_status == 4 { "Failed" } else { "NONE" };
+                if icloud_status == 0 {
+                    println!("[DIAGNOSTIC] RENDER: state = {}, icon = {}", diag_state, diag_icon);
+                }
+
                 if let Some(civ) = cloud_iv {
-                    if icloud_status == 1 {
+                    if icloud_status == 1 || icloud_status == 4 {
                         civ.setHidden(false);
-                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("icloud.and.arrow.down"), None) {
+                        
+                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(if icloud_status == 1 { objc2_foundation::ns_string!("icloud.and.arrow.down") } else { objc2_foundation::ns_string!("exclamationmark.icloud") }, None) {
                             civ.setImage(Some(&img));
-                            civ.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor()));
+                            if icloud_status == 1 {
+                                civ.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor()));
+                            } else {
+                                civ.setContentTintColor(Some(&objc2_app_kit::NSColor::systemRedColor()));
+                            }
                         }
                     } else {
                         civ.setHidden(true);
@@ -251,54 +263,7 @@ define_class!(
             }
             Retained::autorelease_ptr(cell)
         }
-        #[unsafe(method(downloadItem:))]
-        fn download_item(&self, sender: &objc2_app_kit::NSButton) {
-            unsafe {
-                use objc2::msg_send;
-                use objc2::runtime::AnyObject;
-                use objc2_app_kit::{NSOutlineView, NSView};
-                
-                let mut view: *mut NSView = sender as *const _ as *mut NSView;
-                view = msg_send![view, superview];
-                
-                let mut outline_view: *mut NSOutlineView = std::ptr::null_mut();
-                let mut current = view;
-                while !current.is_null() {
-                    let is_outline: bool = msg_send![current, isKindOfClass: objc2::class!(NSOutlineView)];
-                    if is_outline {
-                        outline_view = current as *mut NSOutlineView;
-                        break;
-                    }
-                    current = msg_send![current, superview];
-                }
-                
-                if !outline_view.is_null() {
-                    let row: isize = msg_send![outline_view, rowForView: view];
-                    if row >= 0 {
-                        let item: *mut AnyObject = msg_send![outline_view, itemAtRow: row];
-                        if !item.is_null() {
-                            let node: &crate::workspace::FileNode = &*(item as *const AnyObject as *const crate::workspace::FileNode);
-                            if node.ivars().icloud_status.get() == 1 || node.ivars().icloud_status.get() == 4 {
-                                node.ivars().icloud_status.set(2);
-                                node.ivars().download_progress.set(0.0);
-                                let _: () = msg_send![outline_view, reloadItem: item, reloadChildren: false];
-                                
-                                let url_str = node.ivars().path.borrow().clone();
-                                let item_retained = objc2::rc::Retained::retain(item).unwrap();
-                                let item_raw = objc2::rc::Retained::into_raw(item_retained) as usize;
-                                let outline_raw = outline_view as usize;
-                                let node_ptr = node as *const crate::workspace::FileNode as usize;
-                                
-                                std::thread::spawn(move || {
-                                    crate::download_file(url_str, item_raw, outline_raw, node_ptr);
-                                });
-                            }
-                        }
-                    }
-                }
             }
-        }
-    }
 );
 
 impl WorkspaceDelegate {
@@ -314,6 +279,29 @@ impl WorkspaceDelegate {
         *this.ivars().folder_image.borrow_mut() = Some(folder_img);
         *this.ivars().doc_image.borrow_mut() = Some(doc_img);
         this
+    }
+
+
+    pub fn find_node_by_path(&self, target_path: &str) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
+        let root_borrow = self.ivars().root_node.borrow();
+        if let Some(root) = root_borrow.as_ref() {
+            return Self::search_node(root, target_path);
+        }
+        None
+    }
+
+    fn search_node(node: &crate::workspace::FileNode, target_path: &str) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
+        if node.ivars().path.borrow().as_str() == target_path {
+            return Some(unsafe { objc2::rc::Retained::retain(node as *const _ as *mut _) }.unwrap());
+        }
+        if let Some(children) = node.ivars().children.borrow().as_ref() {
+            for child in children {
+                if let Some(found) = Self::search_node(child, target_path) {
+                    return Some(found);
+                }
+            }
+        }
+        None
     }
 
     pub fn set_outline_view(&self, view: &objc2::rc::Retained<NSOutlineView>) {

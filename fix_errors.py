@@ -1,18 +1,21 @@
-import re
-
-with open("src/workspace_delegate.rs", "r") as f:
+with open('src/workspace_delegate.rs', 'r') as f:
     content = f.read()
 
-# Fix upgrade() -> load()
-content = content.replace(".upgrade()", ".load()")
+content = content.replace(
+    'crate::download_file(url_str, item_raw, outline_raw, node_ptr);',
+    'crate::download_file(url_str, item_raw, outline_raw, node_ptr, 0);'
+)
 
-# Fix node.retain() -> use Retained::retain
-# The line was: let node_ptr = objc2::rc::Retained::into_raw(node.retain()) as usize;
-content = content.replace("objc2::rc::Retained::into_raw(node.retain())", "objc2::rc::Retained::into_raw(objc2::rc::Retained::retain(node as *const _ as *mut _).unwrap())")
-
-# Add mtm = MainThreadMarker::new().unwrap(); before using mtm in the thread
-if "let weak_ov2 = outline_view_weak.clone();" in content:
-    content = content.replace("let weak_ov2 = outline_view_weak.clone();", "let weak_ov2 = outline_view_weak.clone();\n                                            let mtm = objc2_foundation::MainThreadMarker::new().unwrap();")
-
-with open("src/workspace_delegate.rs", "w") as f:
+with open('src/workspace_delegate.rs', 'w') as f:
     f.write(content)
+
+with open('src/main.rs', 'r') as f:
+    content2 = f.read()
+
+content2 = content2.replace(
+    'let item_retained = objc2::rc::Retained::retain(item).unwrap();',
+    'let item_retained = unsafe { objc2::rc::Retained::retain(item as *const _ as *mut _) }.unwrap();'
+)
+
+with open('src/main.rs', 'w') as f:
+    f.write(content2)
