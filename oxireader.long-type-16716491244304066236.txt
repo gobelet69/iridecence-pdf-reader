@@ -1,0 +1,1 @@
+workspace_delegate::WorkspaceDelegate: objc2_app_kit::NSControlTextEditingDelegate
