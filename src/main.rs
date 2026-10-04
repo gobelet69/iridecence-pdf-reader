@@ -155,7 +155,12 @@ define_class!(
                         
                         let window = self.ivars().window.get().unwrap();
                         let split_vc = self.ivars().split_vc.get().unwrap();
-                        unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+                        
+            let split_view = unsafe { split_vc.splitView() };
+            unsafe { split_view.setDividerStyle(objc2_app_kit::NSSplitViewDividerStyle::Thin) };
+            
+            unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+
                     }
                 }
             }
@@ -177,7 +182,12 @@ define_class!(
                     
                     let window = self.ivars().window.get().unwrap();
                     let split_vc = self.ivars().split_vc.get().unwrap();
-                    unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+                    
+            let split_view = unsafe { split_vc.splitView() };
+            unsafe { split_view.setDividerStyle(objc2_app_kit::NSSplitViewDividerStyle::Thin) };
+            
+            unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+
                     
                     let path = url.path().unwrap().to_string();
                     let name = url.lastPathComponent().unwrap().to_string();
@@ -227,7 +237,12 @@ define_class!(
                             window.setTitle(&title);
                         }
                         if let Some(split_vc) = self.ivars().split_vc.get() {
-                            unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+                            
+            let split_view = unsafe { split_vc.splitView() };
+            unsafe { split_view.setDividerStyle(objc2_app_kit::NSSplitViewDividerStyle::Thin) };
+            
+            unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+
                         }
                     }
                     
@@ -360,7 +375,19 @@ define_class!(
                                                 let mut err: *mut AnyObject = std::ptr::null_mut();
                                                 let _: bool = msg_send![&fm, startDownloadingUbiquitousItemAtURL: &*nsurl, error: &mut err];
                                                 
-                                                loop {
+                                        
+        let mut iterations = 0;
+        loop {
+            iterations += 1;
+            if iterations > 120 {
+                node.ivars().icloud_status.set(1); // Revert to cloud if timeout
+                let o_ptr = outline_raw as *mut NSOutlineView;
+                let i_ptr = item_raw as *mut AnyObject;
+                let _: () = objc2::msg_send![o_ptr, performSelectorOnMainThread: objc2::sel!(reloadItem:), withObject: i_ptr, waitUntilDone: false];
+                let _: objc2::rc::Retained<AnyObject> = objc2::rc::Retained::from_raw(i_ptr as *mut AnyObject).unwrap();
+                break;
+            }
+
                                                     let mut is_dl_val: *mut AnyObject = std::ptr::null_mut();
                                                     let key = NSString::from_str("NSURLUbiquitousItemIsDownloadingKey");
                                                     let ok: bool = msg_send![&nsurl, getResourceValue: &mut is_dl_val, forKey: &*key, error: std::ptr::null_mut::<AnyObject>()];
@@ -514,6 +541,19 @@ define_class!(
                                     });
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        #[unsafe(method(applicationDidBecomeActive:))]
+        fn application_did_become_active(&self, _notification: &objc2_foundation::NSNotification) {
+            if let Some(wd) = self.ivars().workspace_delegate.get() {
+                if let Some(outline_weak) = &*wd.ivars().outline_view.borrow() {
+                    if let Some(outline) = outline_weak.load() {
+                        unsafe {
+                            let _: () = objc2::msg_send![&outline, reloadData];
                         }
                     }
                 }
@@ -750,7 +790,19 @@ pub fn download_file(url_str: String, item_raw: usize, outline_raw: usize, node_
         
         let node = &*(node_ptr as *const crate::workspace::FileNode);
         
+
+        let mut iterations = 0;
         loop {
+            iterations += 1;
+            if iterations > 120 {
+                node.ivars().icloud_status.set(1); // Revert to cloud if timeout
+                let o_ptr = outline_raw as *mut NSOutlineView;
+                let i_ptr = item_raw as *mut AnyObject;
+                let _: () = objc2::msg_send![o_ptr, performSelectorOnMainThread: objc2::sel!(reloadItem:), withObject: i_ptr, waitUntilDone: false];
+                let _: objc2::rc::Retained<AnyObject> = objc2::rc::Retained::from_raw(i_ptr as *mut AnyObject).unwrap();
+                break;
+            }
+
             let mut is_dl_val: *mut AnyObject = std::ptr::null_mut();
             let mut error: *mut AnyObject = std::ptr::null_mut();
             let key = NSString::from_str("NSURLUbiquitousItemIsDownloadingKey");
