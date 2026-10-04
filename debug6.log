@@ -1,8 +1,0 @@
-load_children started for "/Users/theodeville/Documents/MASTER"
-Thread started
-Thread finished, posting finishLoading to 517905070720
-finishLoading started for "/Users/theodeville/Documents/MASTER"
-nodeDidLoadChildren received!
-outline_view loaded!
-is_root: true
-Posted FileNodeDidLoadChildren for "/Users/theodeville/Documents/MASTER"
