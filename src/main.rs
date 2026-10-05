@@ -1,11 +1,47 @@
+use std::sync::Mutex;
+use std::collections::HashSet;
+use once_cell::sync::Lazy;
+pub static ACTIVE_DOWNLOADS: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| Mutex::new(HashSet::new()));
 use objc2_foundation::NSInteger;
 use std::cell::OnceCell;
 use objc2::rc::Retained;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ICloudState {
+    Local = 0,
+    CloudOnly = 1,
+    DownloadRequested = 2, // Also Downloading for now
+    Failed = 4,
+    Unknown = 99,
+}
+impl ICloudState {
+    pub fn from_int(v: u32) -> Self {
+        match v {
+            0 => ICloudState::Local,
+            1 => ICloudState::CloudOnly,
+            2 => ICloudState::DownloadRequested,
+            4 => ICloudState::Failed,
+            _ => ICloudState::Unknown,
+        }
+    }
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            ICloudState::Local => "Local",
+            ICloudState::CloudOnly => "CloudOnly",
+            ICloudState::DownloadRequested => "Downloading",
+            ICloudState::Failed => "Failed",
+            ICloudState::Unknown => "Unknown",
+        }
+    }
+}
+
 use objc2::{define_class, msg_send, sel, ClassType, DeclaredClass, MainThreadOnly, AnyThread};
 use objc2::runtime::{ProtocolObject, AnyObject};
 
 mod workspace;
 mod workspace_delegate;
+mod logger;
+mod debug_console;
 use objc2_app_kit::{NSVisualEffectView, 
     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSBackingStoreType, 
     NSWindow, NSWindowStyleMask, NSOpenPanel, NSModalResponseOK,
@@ -191,14 +227,14 @@ define_class!(
                     
                     let path = url.path().unwrap().to_string();
                     let name = url.lastPathComponent().unwrap().to_string();
-                    println!("Opening folder: {}", path); let root = crate::workspace::FileNode::new(path, name, true);
+                    crate::log_workspace!("Opening folder: {}", path); let root = crate::workspace::FileNode::new(path, name, true);
                     
                     if let Some(del) = self.ivars().workspace_delegate.get() {
                         del.ivars().root_node.borrow_mut().replace(root);
                         if let Some(scroll) = self.ivars().outline_scroll.get() {
                             if let Some(view) = unsafe { scroll.documentView() } {
                                 if let Some(outline) = view.downcast_ref::<NSOutlineView>() { 
-                                    println!("Reloading outline view!"); unsafe { outline.reloadData() };
+                                    crate::log_workspace!("Reloading outline view!"); unsafe { outline.reloadData() };
                                     unsafe { outline.expandItem(None) };
                                 }
                             }
@@ -304,26 +340,26 @@ define_class!(
         
         #[unsafe(method(pdfDidLoad:))]
         fn pdf_did_load(&self, doc: Option<&objc2_pdf_kit::PDFDocument>) {
-            println!("[DIAGNOSTIC] PDF DID LOAD ENTER");
+            crate::log_pdf!("[DIAGNOSTIC] PDF DID LOAD ENTER");
             if let Some(doc) = doc {
                 let main_thread = std::thread::current().name() == Some("main");
-                println!("[DIAGNOSTIC] main thread = {}", main_thread);
+                crate::log_pdf!("[DIAGNOSTIC] main thread = {}", main_thread);
                 
                 if let Some(url) = unsafe { doc.documentURL() } {
                     let path = url.path().unwrap().to_string();
-                    println!("[DIAGNOSTIC] path = {}", path);
+                    crate::log_pdf!("[DIAGNOSTIC] path = {}", path);
                     if path == *self.ivars().pending_pdf_path.borrow() {
-                        println!("[DIAGNOSTIC] PDFVIEW BEFORE setDocument");
+                        crate::log_pdf!("[DIAGNOSTIC] PDFVIEW BEFORE setDocument");
                         unsafe { self.ivars().pdf_view.get().unwrap().setDocument(Some(doc)) };
                         
                         let page_count = unsafe { doc.pageCount() };
-                        println!("[DIAGNOSTIC] PDFVIEW AFTER setDocument: pageCount = {}", page_count);
+                        crate::log_pdf!("[DIAGNOSTIC] PDFVIEW AFTER setDocument: pageCount = {}", page_count);
                     } else {
-                        println!("[DIAGNOSTIC] Discarded obsolete doc: {}", path);
+                        crate::log_pdf!("[DIAGNOSTIC] Discarded obsolete doc: {}", path);
                     }
                 }
             } else {
-                println!("[DIAGNOSTIC] doc is None");
+                crate::log_pdf!("[DIAGNOSTIC] doc is None");
             }
         }
 
@@ -361,30 +397,50 @@ define_class!(
                                 if !already_open {
                                     let icloud_status = node.ivars().icloud_status.get();
                                     
-                                    println!("[DIAGNOSTIC] CLICK: path = {}, old_state = {}", url_str, icloud_status);
+                                    crate::log_workspace!("[DIAGNOSTIC] CLICK: path = {}, old_state = {}", url_str, crate::ICloudState::from_int(icloud_status as u32).to_str());
                                     
-                                    if icloud_status == 1 || icloud_status == 4 { // CloudOnly or Failed
-                                        // 1. Set to DownloadRequested
-                                        node.ivars().icloud_status.set(2);
-                                        println!("[DIAGNOSTIC] MODEL UPDATE: old_state = {}, new_state = {}", icloud_status, 2);
-                                        
-                                        // 2. Reload row immediately
-                                        let _: () = unsafe { objc2::msg_send![outline, reloadItem: &*item, reloadChildren: false] };
-                                        println!("[DIAGNOSTIC] ROW RELOAD: row = {}", selected_row);
+                                    if icloud_status == 2 {
+                                        crate::log_workspace!("[DIAGNOSTIC] FORCE REFRESH: {}", url_str);
+                                        if crate::is_file_locally_usable(&url_str) {
+                                            crate::log_workspace!("[DIAGNOSTIC] status=Current, readable=true");
+                                            node.ivars().icloud_status.set(0);
+                                            crate::log_ui!("[DIAGNOSTIC] MODEL UPDATE: Downloading -> Local");
+                                            let _: () = unsafe { objc2::msg_send![outline, reloadItem: &*item, reloadChildren: false] };
+                                            crate::log_ui!("[DIAGNOSTIC] ROW RELOAD: row = {}", selected_row);
+                                        }
+                                    }
+                                    
+                                    if icloud_status == 1 || icloud_status == 4 || node.ivars().icloud_status.get() == 2 { // CloudOnly, Failed, or still Downloading
+                                        if node.ivars().icloud_status.get() != 2 {
+                                            // 1. Set to DownloadRequested
+                                            node.ivars().icloud_status.set(2);
+                                            crate::log_ui!("[DIAGNOSTIC] MODEL UPDATE: {} -> {}", crate::ICloudState::from_int(icloud_status as u32).to_str(), "Downloading");
+                                            
+                                            // 2. Reload row immediately
+                                            let _: () = unsafe { objc2::msg_send![outline, reloadItem: &*item, reloadChildren: false] };
+                                            crate::log_ui!("[DIAGNOSTIC] ROW RELOAD: row = {}", selected_row);
+                                            
+                                            // 4. Spawn download
+                                            let outline_raw = outline as *const _ as usize;
+                                            let app_ptr = self as *const AppDelegate as usize;
+                                            
+                                            let mut should_spawn = false;
+                                            if let Ok(mut guard) = crate::ACTIVE_DOWNLOADS.lock() {
+                                                if !guard.contains(&url_str) {
+                                                    guard.insert(url_str.clone());
+                                                    should_spawn = true;
+                                                }
+                                            }
+                                            if should_spawn {
+                                                let url_clone = url_str.clone();
+                                                std::thread::spawn(move || {
+                                                    crate::download_file(url_clone, outline_raw, app_ptr);
+                                                });
+                                            }
+                                        }
                                         
                                         // 3. Mark as pending open
                                         *self.ivars().pending_pdf_path.borrow_mut() = url_str.clone();
-                                        
-                                        // 4. Spawn download
-                                        
-                                        let outline_raw = outline as *const _ as usize;
-                                        
-                                        let app_ptr = self as *const AppDelegate as usize;
-                                        
-                                        std::thread::spawn(move || {
-                                            crate::download_file(url_str, outline_raw, app_ptr);
-                                        });
-                                        
                                         return;
                                     }
                                     
@@ -392,6 +448,7 @@ define_class!(
                                     *self.ivars().pending_pdf_path.borrow_mut() = url_str.clone();
                                     let app_ptr = self as *const AppDelegate as usize;
                                     
+                                    crate::log_pdf!("[DIAGNOSTIC] PDF LOAD START");
                                     std::thread::spawn(move || {
                                         let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
                                         let doc = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &nsurl) };
@@ -415,19 +472,19 @@ define_class!(
         #[unsafe(method(downloadDidComplete:))]
         fn download_did_complete(&self, path: &objc2_foundation::NSString) {
             let path_str = path.to_string();
-            println!("[DIAGNOSTIC] MODEL LOOKUP: canonical path = {}", path_str);
+            crate::log_pdf!("[DIAGNOSTIC] MODEL LOOKUP: canonical path = {}", path_str);
             if let Some(wd) = self.ivars().workspace_delegate.get() {
                 if let Some(node) = wd.find_node_by_path(&path_str) {
-                    println!("[DIAGNOSTIC] MODEL LOOKUP: FileNode identity = {:p}", &*node);
+                    crate::log_ui!("[DIAGNOSTIC] MODEL LOOKUP: FileNode identity = {:p}", &*node);
                     let old = node.ivars().icloud_status.get();
                     node.ivars().icloud_status.set(0);
-                    println!("[DIAGNOSTIC] MODEL UPDATE: old = {}, new = 0", old);
+                    crate::log_ui!("[DIAGNOSTIC] MODEL UPDATE: {} -> Local", crate::ICloudState::from_int(old as u32).to_str());
                     
                     if let Some(weak_view) = &*wd.ivars().outline_view.borrow() {
                         if let Some(outline) = weak_view.load() {
                             let row = unsafe { outline.rowForItem(Some(&*(&*node as *const _ as *const objc2::runtime::AnyObject))) };
                             if row >= 0 {
-                                println!("[DIAGNOSTIC] ROW RELOAD: item identity = {:p}, row = {}", &*node, row);
+                                crate::log_ui!("[DIAGNOSTIC] ROW RELOAD: item identity = {:p}, row = {}", &*node, row);
                                 let _: () = unsafe { objc2::msg_send![&outline, reloadItem: &*(&*node as *const _ as *const objc2::runtime::AnyObject), reloadChildren: false] };
                             }
                         }
@@ -436,20 +493,23 @@ define_class!(
             }
             
             let pending = self.ivars().pending_pdf_path.borrow().clone();
-            println!("[DIAGNOSTIC] PENDING OPEN LOOKUP: pending path = {}, matches = {}", pending, pending == path_str);
+            if let Ok(mut guard) = crate::ACTIVE_DOWNLOADS.lock() {
+                guard.remove(&path_str);
+            }
+            crate::log_pdf!("[DIAGNOSTIC] PENDING OPEN LOOKUP: pending path = {}, matches = {}", pending, pending == path_str);
             
             if pending == path_str {
-                println!("[DIAGNOSTIC] PDF LOAD START");
+                crate::log_pdf!("[DIAGNOSTIC] PDF LOAD START");
                 let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(path) };
                 let doc = unsafe { objc2_pdf_kit::PDFDocument::initWithURL(objc2_pdf_kit::PDFDocument::alloc(), &nsurl) };
                 if let Some(doc) = doc {
-                    println!("[DIAGNOSTIC] PDF LOAD COMPLETE");
+                    crate::log_pdf!("[DIAGNOSTIC] PDF LOAD COMPLETE");
                     let doc_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(doc) };
                     println!("[DIAGNOSTIC] PDF DISPLAY DISPATCH");
                     let _: () = unsafe { objc2::msg_send![self, pdfDidLoad: &*doc_any] };
                     *self.ivars().pending_pdf_path.borrow_mut() = String::new();
                 } else {
-                    println!("[DIAGNOSTIC] PDF LOAD FAILED");
+                    crate::log_pdf!("[DIAGNOSTIC] PDF LOAD FAILED");
                 }
             }
         }
@@ -457,6 +517,9 @@ define_class!(
         #[unsafe(method(downloadDidFail:))]
         fn download_did_fail(&self, path: &objc2_foundation::NSString) {
             let path_str = path.to_string();
+            if let Ok(mut guard) = crate::ACTIVE_DOWNLOADS.lock() {
+                guard.remove(&path_str);
+            }
             if let Some(wd) = self.ivars().workspace_delegate.get() {
                 if let Some(node) = wd.find_node_by_path(&path_str) {
                     node.ivars().icloud_status.set(4);
@@ -472,6 +535,9 @@ define_class!(
                 #[unsafe(method(downloadDidTimeout:))]
         fn download_did_timeout(&self, path: &objc2_foundation::NSString) {
             let path_str = path.to_string();
+            if let Ok(mut guard) = crate::ACTIVE_DOWNLOADS.lock() {
+                guard.remove(&path_str);
+            }
             
             let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(path) };
             let mut stat_val: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
@@ -489,7 +555,7 @@ define_class!(
             }
             
             if is_local {
-                println!("[DIAGNOSTIC] TIMEOUT RECOVERY: File is local, treating as complete.");
+                crate::log_icloud!("[DIAGNOSTIC] TIMEOUT RECOVERY: File is local, treating as complete.");
                 let _: () = unsafe { objc2::msg_send![self, downloadDidComplete: path] };
                 return;
             }
@@ -520,7 +586,14 @@ define_class!(
             }
         }
 
+        
+        #[unsafe(method(openDebugConsole:))]
+        fn open_debug_console(&self, _sender: Option<&AnyObject>) {
+            crate::debug_console::show_debug_console();
+        }
+        
         #[unsafe(method(applicationDidFinishLaunching:))]
+
         fn application_did_finish_launching(&self, _notification: *mut objc2_foundation::NSNotification) {
             let mtm = MainThreadMarker::new().unwrap();
             
@@ -534,11 +607,25 @@ define_class!(
             let quit_action = sel!(terminate:);
             let quit_key = objc2_foundation::ns_string!("q");
             let quit_item = unsafe { NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), quit_title, Some(quit_action), quit_key) };
+            
             unsafe {
                 app_menu.addItem(&quit_item);
                 app_menu_item.setSubmenu(Some(&app_menu));
+                
+                // Window menu
+                let window_menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Window"), None, &objc2_foundation::NSString::from_str(""));
+                let window_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &objc2_foundation::NSString::from_str("Window"));
+                let debug_title = objc2_foundation::NSString::from_str("Debug Console");
+                let debug_key = objc2_foundation::NSString::from_str("l");
+                let debug_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &debug_title, Some(objc2::sel!(openDebugConsole:)), &debug_key);
+                                window_menu.addItem(&debug_item);
+                window_menu_item.setSubmenu(Some(&window_menu));
+                
+                menubar.addItem(&window_menu_item);
+                
                 NSApplication::sharedApplication(mtm).setMainMenu(Some(&menubar));
             }
+
             
             let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1000.0, 700.0));
             let style = NSWindowStyleMask::Titled 
@@ -737,91 +824,161 @@ fn main() {
 }
 
 pub fn download_file(url_str: String, outline_raw: usize, app_ptr: usize) {
+    let result = std::panic::catch_unwind(move || {
+        unsafe {
+            use objc2::msg_send;
+            use objc2::runtime::AnyObject;
+            use objc2_foundation::{NSURL, NSString, NSFileManager};
+            use objc2_app_kit::NSOutlineView;
+            
+            crate::log_icloud!("[DIAGNOSTIC] DOWNLOAD THREAD ENTER: path = {}", url_str);
+            crate::log_icloud!("[DIAGNOSTIC] START DOWNLOAD API BEFORE");
+            
+            let nsurl = NSURL::fileURLWithPath(&NSString::from_str(&url_str));
+            let fm = NSFileManager::defaultManager();
+            let mut err: *mut AnyObject = std::ptr::null_mut();
+            let ok: bool = msg_send![&fm, startDownloadingUbiquitousItemAtURL: &*nsurl, error: &mut err];
+            
+            crate::log_icloud!("[DIAGNOSTIC] START DOWNLOAD API AFTER: success = {}", ok);
+            crate::log_icloud!("[DIAGNOSTIC] POLL LOOP ENTER");
+            
+            let mut iterations = 0;
+            loop {
+                iterations += 1;
+                crate::log_icloud!("[DIAGNOSTIC] POLL ITERATION #{} START", iterations);
+                
+                if iterations > 120 {
+                    crate::log_icloud!("[DIAGNOSTIC] POLL LOOP EXIT reason=timeout");
+                    if app_ptr != 0 {
+                        let app_raw = app_ptr as *mut AnyObject;
+                        let path_str = NSString::from_str(&url_str);
+                        let _: () = msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(downloadDidTimeout:), withObject: &*path_str, waitUntilDone: false];
+                    }
+                    break;
+                }
+
+                crate::log_icloud!("[DIAGNOSTIC] METADATA QUERY START");
+                let mut is_dl_val: Option<objc2::rc::Retained<AnyObject>> = None;
+                let key = NSString::from_str("NSURLUbiquitousItemIsDownloadingKey");
+                let ok1 = nsurl.getResourceValue_forKey_error(&mut is_dl_val, &key).is_ok();
+                
+                let mut still_dl = false;
+                if ok1 {
+                    if let Some(val) = is_dl_val {
+                        still_dl = msg_send![&val, boolValue];
+                    }
+                }
+                
+                let mut stat_val: Option<objc2::rc::Retained<AnyObject>> = None;
+                let key_stat = NSString::from_str("NSURLUbiquitousItemDownloadingStatusKey");
+                let ok_stat = nsurl.getResourceValue_forKey_error(&mut stat_val, &key_stat).is_ok();
+                
+                let mut is_current = false;
+                let mut is_downloaded = false;
+                let mut stat_string = "Unknown".to_string();
+                if ok_stat {
+                    if let Some(stat_obj) = stat_val {
+                        let utf8: *const std::ffi::c_char = msg_send![&stat_obj, UTF8String];
+                        if !utf8.is_null() {
+                            stat_string = std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned();
+                        }
+                        let dl_id = NSString::from_str("NSURLUbiquitousItemDownloadingStatusDownloaded");
+                        let current_id = NSString::from_str("NSURLUbiquitousItemDownloadingStatusCurrent");
+                        is_downloaded = msg_send![&stat_obj, isEqualToString: &*dl_id];
+                        is_current = msg_send![&stat_obj, isEqualToString: &*current_id];
+                    }
+                }
+                
+                let mut prog_val: Option<objc2::rc::Retained<AnyObject>> = None;
+                let key_prog = NSString::from_str("NSURLUbiquitousItemPercentDownloadedKey");
+                let ok_prog = nsurl.getResourceValue_forKey_error(&mut prog_val, &key_prog).is_ok();
+                let mut percent = 0.0;
+                if ok_prog {
+                    if let Some(val) = prog_val {
+                        percent = msg_send![&val, doubleValue];
+                    }
+                }
+                
+                let is_readable = fm.isReadableFileAtPath(&NSString::from_str(&url_str));
+                let exists = fm.fileExistsAtPath(&NSString::from_str(&url_str));
+                
+                let mut size: u64 = 0;
+                if let Ok(meta) = std::fs::metadata(&url_str) {
+                    size = meta.len();
+                }
+                
+                crate::log_icloud!("[DIAGNOSTIC] METADATA QUERY END");
+                crate::log_icloud!("[DIAGNOSTIC] POLL ITERATION #{} RESULT: status={}, isDownloading={}, isDownloaded={}, percent={}, exists={}, readable={}, size={}", 
+                    iterations, stat_string, still_dl, is_downloaded, percent, exists, is_readable, size);
+                
+                if is_downloaded || is_current || (exists && is_readable && size > 0 && percent == 100.0) || (exists && is_readable && size > 0 && stat_string == "NSURLUbiquitousItemDownloadingStatusNotDownloaded") {
+                    crate::log_pdf!("[DIAGNOSTIC] DOWNLOAD COMPLETE DETECTED: path = {}", url_str);
+                    crate::log_icloud!("[DIAGNOSTIC] POLL LOOP EXIT reason=completed");
+                    if app_ptr != 0 {
+                        let app_raw = app_ptr as *mut AnyObject;
+                        let path_str = NSString::from_str(&url_str);
+                        let _: () = msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(downloadDidComplete:), withObject: &*path_str, waitUntilDone: false];
+                    }
+                    break;
+                } else {
+                    crate::log_icloud!("[DIAGNOSTIC] SLEEP");
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+            }
+        }
+    });
+    
+    if let Err(err) = result {
+        if let Some(s) = err.downcast_ref::<String>() {
+            crate::log_error!("[DIAGNOSTIC] DOWNLOAD THREAD PANICKED: {}", s);
+        } else if let Some(s) = err.downcast_ref::<&str>() {
+            crate::log_error!("[DIAGNOSTIC] DOWNLOAD THREAD PANICKED: {}", s);
+        } else {
+            crate::log_error!("[DIAGNOSTIC] DOWNLOAD THREAD PANICKED: {:?}", err);
+        }
+    }
+}
+pub fn is_file_locally_usable(url_str: &str) -> bool {
     unsafe {
         use objc2::msg_send;
         use objc2::runtime::AnyObject;
         use objc2_foundation::{NSURL, NSString, NSFileManager};
-        use objc2_app_kit::NSOutlineView;
         
-        println!("[DIAGNOSTIC] DOWNLOAD START: state = Downloading");
-        
-        let nsurl = NSURL::fileURLWithPath(&NSString::from_str(&url_str));
+        let nsurl = NSURL::fileURLWithPath(&NSString::from_str(url_str));
         let fm = NSFileManager::defaultManager();
-        let mut err: *mut AnyObject = std::ptr::null_mut();
-        let _: bool = msg_send![&fm, startDownloadingUbiquitousItemAtURL: &*nsurl, error: &mut err];
         
-        let mut iterations = 0;
-        loop {
-            iterations += 1;
-            if iterations > 120 {
-                println!("[DIAGNOSTIC] DOWNLOAD TIMEOUT");
-                if app_ptr != 0 {
-                    let app_raw = app_ptr as *mut AnyObject;
-                    let path_str = NSString::from_str(&url_str);
-                    let _: () = msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(downloadDidTimeout:), withObject: &*path_str, waitUntilDone: false];
-                }
-                break;
-            }
-
-            let mut is_dl_val: *mut AnyObject = std::ptr::null_mut();
-            let mut error: *mut AnyObject = std::ptr::null_mut();
-            let key = NSString::from_str("NSURLUbiquitousItemIsDownloadingKey");
-            let ok: bool = msg_send![&nsurl, getResourceValue: &mut is_dl_val, forKey: &*key, error: &mut error];
-            
-            let mut still_dl = false;
-            if ok && !is_dl_val.is_null() {
-                let is_dl: bool = msg_send![is_dl_val, boolValue];
-                still_dl = is_dl;
-            }
-            
-            let mut stat_val: *mut AnyObject = std::ptr::null_mut();
-            let key_stat = NSString::from_str("NSURLUbiquitousItemDownloadingStatusKey");
-            let ok_stat: bool = msg_send![&nsurl, getResourceValue: &mut stat_val, forKey: &*key_stat, error: std::ptr::null_mut::<AnyObject>()];
-            
-            let mut is_current = false;
-            let mut is_downloaded = false;
-            if ok_stat && !stat_val.is_null() {
-                let stat_str = stat_val as *mut NSString;
+        let mut stat_val: Option<objc2::rc::Retained<AnyObject>> = None;
+        let key_stat = NSString::from_str("NSURLUbiquitousItemDownloadingStatusKey");
+        let ok_stat = nsurl.getResourceValue_forKey_error(&mut stat_val, &key_stat).is_ok();
+        
+        if ok_stat {
+            if let Some(stat_obj) = stat_val {
                 let dl_id = NSString::from_str("NSURLUbiquitousItemDownloadingStatusDownloaded");
                 let current_id = NSString::from_str("NSURLUbiquitousItemDownloadingStatusCurrent");
-                is_downloaded = msg_send![stat_str, isEqualToString: &*dl_id];
-                is_current = msg_send![stat_str, isEqualToString: &*current_id];
-            }
-            
-            println!("[DIAGNOSTIC] POLL: isDownloading = {}, isDownloaded = {}, current = {}", still_dl, is_downloaded, is_current);
-            
-            if still_dl && !is_current && !is_downloaded {
-                let mut prog_val: *mut AnyObject = std::ptr::null_mut();
-                let key_prog = NSString::from_str("NSURLUbiquitousItemPercentDownloadedKey");
-                let ok_prog: bool = msg_send![&nsurl, getResourceValue: &mut prog_val, forKey: &*key_prog, error: std::ptr::null_mut::<AnyObject>()];
-                let mut p = 0.0;
-                if ok_prog && !prog_val.is_null() {
-                    p = msg_send![prog_val, doubleValue];
+                let is_downloaded: bool = msg_send![&stat_obj, isEqualToString: &*dl_id];
+                let is_current: bool = msg_send![&stat_obj, isEqualToString: &*current_id];
+                if is_downloaded || is_current {
+                    return true;
                 }
-                
-                if app_ptr != 0 {
-                    // Update progress if needed, though we can skip this to avoid spamming the main thread, or send a progress update
-                }
-                
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            } else {
-                println!("[DIAGNOSTIC] DOWNLOAD COMPLETE DETECTED: path = {}", url_str);
-                if app_ptr != 0 {
-                    let app_raw = app_ptr as *mut AnyObject;
-                    let is_success = is_downloaded || is_current;
-                    let path_str = NSString::from_str(&url_str);
-                    if is_success {
-                        let _: () = msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(downloadDidComplete:), withObject: &*path_str, waitUntilDone: false];
-                    } else {
-                        let _: () = msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(downloadDidFail:), withObject: &*path_str, waitUntilDone: false];
-                    }
-                }
-                break;
             }
         }
+        
+        // Fallback: check if we can read it and size > 0
+        if fm.isReadableFileAtPath(&NSString::from_str(url_str)) {
+            if let Ok(meta) = std::fs::metadata(url_str) {
+                if meta.len() > 0 {
+                    // Try to instantiate a PDFDocument as ultimate fallback?
+                    // Might be too slow for general UI, but if it's readable and size > 0 it's likely local.
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
+
 pub fn refresh_file_status(url_str: String, item_raw: usize, outline_raw: usize, node_ptr: usize) {
+
     unsafe {
         use objc2::msg_send;
         use objc2::runtime::AnyObject;
@@ -836,13 +993,15 @@ pub fn refresh_file_status(url_str: String, item_raw: usize, outline_raw: usize,
         let old_status = new_status;
         let old_progress = new_progress;
         
-        let mut is_dl_val: *mut AnyObject = std::ptr::null_mut();
+        let mut is_dl_val: Option<objc2::rc::Retained<AnyObject>> = None;
         let key = NSString::from_str("NSURLUbiquitousItemIsDownloadingKey");
-        let ok: bool = msg_send![&nsurl, getResourceValue: &mut is_dl_val, forKey: &*key, error: std::ptr::null_mut::<AnyObject>()];
+        let ok = nsurl.getResourceValue_forKey_error(&mut is_dl_val, &key).is_ok();
         
         let mut is_downloading = false;
-        if ok && !is_dl_val.is_null() {
-            is_downloading = msg_send![is_dl_val, boolValue];
+        if ok {
+            if let Some(val) = is_dl_val {
+                is_downloading = msg_send![&val, boolValue];
+            }
         }
         
         if is_downloading {
