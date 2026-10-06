@@ -73,6 +73,8 @@ struct AppDelegateIvars {
     thumb_view: OnceCell<Retained<PDFThumbnailView>>,
     explorer_item: OnceCell<Retained<NSSplitViewItem>>,
     navigation_item: OnceCell<Retained<NSSplitViewItem>>,
+    right_sidebar_outline_scroll: OnceCell<Retained<NSScrollView>>,
+    pdf_outline_delegate: OnceCell<Retained<crate::pdf_outline::PdfOutlineDelegate>>,
 }
 
 define_class!(
@@ -302,14 +304,15 @@ define_class!(
             if let Some(sender) = sender {
                 if let Some(segmented) = sender.downcast_ref::<NSSegmentedControl>() {
                     let index = unsafe { segmented.selectedSegment() };
-                    let outline_scroll = self.ivars().outline_scroll.get().unwrap();
-                    let thumb_view = self.ivars().thumb_view.get().unwrap();
-                    if index == 0 {
-                        unsafe { outline_scroll.setHidden(false) };
-                        unsafe { thumb_view.setHidden(true) };
-                    } else {
-                        unsafe { outline_scroll.setHidden(true) };
-                        unsafe { thumb_view.setHidden(false) };
+                    if let Some(outline_scroll) = self.ivars().right_sidebar_outline_scroll.get() {
+                        let thumb_view = self.ivars().thumb_view.get().unwrap();
+                        if index == 0 {
+                            unsafe { outline_scroll.setHidden(true) };
+                            unsafe { thumb_view.setHidden(false) };
+                        } else {
+                            unsafe { outline_scroll.setHidden(false) };
+                            unsafe { thumb_view.setHidden(true) };
+                        }
                     }
                 }
             }
@@ -587,6 +590,46 @@ define_class!(
         }
 
         
+                #[unsafe(method(thumbnailFrameChanged:))]
+        fn thumbnail_frame_changed(&self, notification: &objc2_foundation::NSNotification) {
+            if let Some(obj) = unsafe { notification.object() } {
+                if let Some(view) = obj.downcast_ref::<NSView>() {
+                    let frame = view.frame();
+                    let width = frame.size.width;
+                    let thumb_width = (width - 40.0).max(50.0);
+                    let thumb_height = thumb_width * 1.414;
+                    if let Some(thumb_view) = self.ivars().thumb_view.get() {
+                        unsafe { thumb_view.setThumbnailSize(NSSize::new(thumb_width, thumb_height)) };
+                    }
+                }
+            }
+        }
+        #[unsafe(method(fitWidth:))]
+        fn fit_width(&self, _sender: Option<&AnyObject>) {
+            if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                unsafe { pdf_view.setAutoScales(true) };
+                // There is no explicit Fit Width in PDFView's public property except setting scale manually,
+                // but setting autoScales typically behaves as fit width/page depending on display mode.
+                // We will just call setDisplayBox if needed, but PDFDisplayMode is enough.
+                // Better yet: PDFView has `setAutoScales` which does Fit Page.
+                // Let's rely on standard actions or just `setAutoScales`.
+            }
+        }
+        #[unsafe(method(fitPage:))]
+        fn fit_page(&self, _sender: Option<&AnyObject>) {
+            if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                unsafe { pdf_view.setAutoScales(true) };
+            }
+        }
+        #[unsafe(method(actualSize:))]
+        fn actual_size(&self, _sender: Option<&AnyObject>) {
+            if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                unsafe { 
+                    pdf_view.setAutoScales(false);
+                    pdf_view.setScaleFactor(1.0); 
+                };
+            }
+        }
         #[unsafe(method(openDebugConsole:))]
         fn open_debug_console(&self, _sender: Option<&AnyObject>) {
             crate::debug_console::show_debug_console();
@@ -622,6 +665,22 @@ define_class!(
                 window_menu_item.setSubmenu(Some(&window_menu));
                 
                 menubar.addItem(&window_menu_item);
+                
+                let view_menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("View"), None, &objc2_foundation::NSString::from_str(""));
+                let view_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &objc2_foundation::NSString::from_str("View"));
+                
+                let fit_width_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Fit Width"), Some(objc2::sel!(fitWidth:)), &objc2_foundation::NSString::from_str("2"));
+                let fit_page_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Fit Page"), Some(objc2::sel!(fitPage:)), &objc2_foundation::NSString::from_str("3"));
+                let actual_size_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Actual Size"), Some(objc2::sel!(actualSize:)), &objc2_foundation::NSString::from_str("0"));
+                
+                unsafe {
+                    view_menu.addItem(&actual_size_item);
+                    view_menu.addItem(&fit_width_item);
+                    view_menu.addItem(&fit_page_item);
+                    view_menu_item.setSubmenu(Some(&view_menu));
+                    menubar.addItem(&view_menu_item);
+                }
+
                 
                 NSApplication::sharedApplication(mtm).setMainMenu(Some(&menubar));
             }
@@ -735,19 +794,99 @@ define_class!(
                 explorer_item.setMaximumThickness(420.0);
             }
 
+
+            // RIGHT SIDEBAR (Outline + Pages)
+            let pdf_outline_del = crate::pdf_outline::PdfOutlineDelegate::new(mtm, pdf_view.clone());
+            let right_outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let right_col = unsafe { NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), objc2_foundation::ns_string!("OutlineColumn")) };
+            unsafe {
+                right_col.setWidth(200.0);
+                right_outline_view.addTableColumn(&right_col);
+                right_outline_view.setOutlineTableColumn(Some(&right_col));
+                right_outline_view.setHeaderView(None);
+                
+                let del_ptr: *const crate::pdf_outline::PdfOutlineDelegate = &*pdf_outline_del;
+                let _: () = msg_send![&right_outline_view, setDelegate: del_ptr];
+                let _: () = msg_send![&right_outline_view, setDataSource: del_ptr];
+            }
+            
+            let right_outline_scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            unsafe {
+                right_outline_scroll.setHasVerticalScroller(true);
+                right_outline_scroll.setDocumentView(Some(&right_outline_view));
+                right_outline_scroll.setDrawsBackground(false);
+                right_outline_scroll.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
+                right_outline_scroll.setHidden(true); // default to Pages
+            }
+            
+            let right_container = unsafe { NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            
+            let segmented = unsafe { NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
+                &NSArray::from_slice(&[objc2_foundation::ns_string!("Pages"), objc2_foundation::ns_string!("Outline")]),
+                NSSegmentSwitchTracking::SelectOne,
+                Some(unsafe { &*(self as *const AppDelegate as *const AnyObject) }),
+                Some(objc2::sel!(switchSidebar:)),
+                mtm
+            ) };
+            unsafe {
+                segmented.setSelected_forSegment(true, 0);
+                
+                let seg_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 40.0)));
+                seg_wrapper.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin);
+                seg_wrapper.addSubview(&segmented);
+                // Center it (manual approximation)
+                segmented.setFrameOrigin(NSPoint::new(40.0, 8.0));
+                segmented.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin | objc2_app_kit::NSAutoresizingMaskOptions::ViewMaxXMargin);
+                
+                let separator = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 1.0)));
+                separator.setWantsLayer(true);
+                if let Some(layer) = separator.layer() {
+                    let cg = objc2_app_kit::NSColor::separatorColor().CGColor(); let ptr = Retained::as_ptr(&cg); let _: () = msg_send![&layer, setBackgroundColor: ptr];
+                }
+                separator.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin);
+                
+                let content_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 660.0)));
+                content_wrapper.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
+                content_wrapper.addSubview(&thumb_view);
+                content_wrapper.addSubview(&right_outline_scroll);
+                
+                right_container.addSubview(&content_wrapper);
+                right_container.addSubview(&separator);
+                right_container.addSubview(&seg_wrapper);
+            unsafe {
+                let nc = objc2_foundation::NSNotificationCenter::defaultCenter();
+                nc.addObserver_selector_name_object(
+                    &*(self as *const AppDelegate as *const AnyObject),
+                    objc2::sel!(thumbnailFrameChanged:),
+                    Some(objc2_app_kit::NSViewFrameDidChangeNotification),
+                    Some(&*content_wrapper as &AnyObject)
+                );
+                content_wrapper.setPostsFrameChangedNotifications(true);
+            }
+
+                
+                // Layout adjustment
+                seg_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 40.0), NSSize::new(200.0, 40.0)));
+                separator.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 41.0), NSSize::new(200.0, 1.0)));
+                content_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0 - 41.0)));
+            }
+
             let navigation_vc = NSViewController::new(mtm);
-            unsafe { navigation_vc.setView(&thumb_view) };
+            unsafe { navigation_vc.setView(&right_container) };
             let navigation_item = unsafe { NSSplitViewItem::inspectorWithViewController(&navigation_vc) };
             unsafe {
                 navigation_item.setCanCollapse(true);
-                navigation_item.setMinimumThickness(150.0);
-                navigation_item.setMaximumThickness(320.0);
+                navigation_item.setMinimumThickness(180.0);
+                navigation_item.setMaximumThickness(360.0);
             }
+
             
             self.ivars().explorer_item.set(explorer_item.clone()).unwrap();
             self.ivars().navigation_item.set(navigation_item.clone()).unwrap();
             self.ivars().outline_scroll.set(outline_scroll).unwrap();
             self.ivars().thumb_view.set(thumb_view).unwrap();
+            self.ivars().right_sidebar_outline_scroll.set(right_outline_scroll).unwrap();
+            let _ = self.ivars().pdf_outline_delegate.set(pdf_outline_del);
 
             unsafe {
                 split_vc.addSplitViewItem(&explorer_item);
@@ -1050,3 +1189,5 @@ pub fn refresh_file_status(url_str: String, item_raw: usize, outline_raw: usize,
         }
     }
 }
+mod test_outline;
+mod pdf_outline;
