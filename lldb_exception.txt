@@ -1,0 +1,1 @@
+(lldb) process attach --name "OxiReader"

@@ -1,0 +1,1 @@
+extern "C-unwind" fn(&WorkspaceDelegate, objc2::runtime::Sel, &NSOutlineView, Option<&NSTableColumn>, &AnyObject) -> Option<Retained<NSView>>

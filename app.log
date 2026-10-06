@@ -1,0 +1,29 @@
+Opening folder: /Users/theodeville/Downloads
+Reloading outline view!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+load_children called!
+2026-10-03 09:39:16.644 oxireader[46716:3004633] [VNImageRequestHandler performRequests:] failed. Error: TextRecognition.CRImageReaderError.e5rtError("e5rt_execution_stream_operation_create_precompiled_compute_operation_with_options call failed", 13)
+2026-10-03 09:39:16.663 oxireader[46716:3004633] Drawing a PDFPage when its PDFDocument is nil is unsupported.
+2026-10-03 09:40:19.372 oxireader[46716:3007936] [VNImageRequestHandler performRequests:] failed. Error: TextRecognition.CRImageReaderError.e5rtError("e5rt_execution_stream_operation_create_precompiled_compute_operation_with_options call failed", 13)
+2026-10-03 09:40:19.372 oxireader[46716:3008239] [VNImageRequestHandler performRequests:] failed. Error: TextRecognition.CRImageReaderError.e5rtError("e5rt_execution_stream_operation_create_precompiled_compute_operation_with_options call failed", 13)

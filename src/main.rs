@@ -50,7 +50,7 @@ use objc2_app_kit::{NSVisualEffectView,
     NSGlassEffectView, NSGlassEffectViewStyle, NSToolbarItemIdentifier,
     NSToolbarDisplayMode, NSMenu, NSMenuItem, NSStackView, NSView, NSButton,
     NSUserInterfaceLayoutOrientation, NSBezelStyle, NSSegmentedControl, NSSegmentSwitchTracking,
-    NSScrollView, NSOutlineView, NSTableColumn, NSOutlineViewDelegate, NSOutlineViewDataSource
+    NSScrollView, NSOutlineView, NSTableColumn, NSOutlineViewDelegate, NSOutlineViewDataSource, NSImage, NSImageView, NSColor, NSTextField, NSImageSymbolConfiguration, NSImageSymbolScale
 };
 use objc2_foundation::{
     MainThreadMarker, NSObject, NSObjectProtocol, NSRect, NSPoint, NSSize, NSArray, NSString, NSURL, NSEdgeInsets
@@ -94,6 +94,28 @@ define_class!(
             item_identifier: &NSToolbarItemIdentifier,
             _flag: bool,
         ) -> *mut NSToolbarItem {
+            let mtm = MainThreadMarker::new().unwrap();
+            
+            // Intercept system items to set tooltips and icons
+            unsafe {
+                if item_identifier == objc2_app_kit::NSToolbarToggleSidebarItemIdentifier {
+                    let item = NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier);
+                    let img = NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("sidebar.left"), None);
+                    item.setImage(img.as_deref());
+                    item.setToolTip(Some(objc2_foundation::ns_string!("Toggle Workspace Sidebar")));
+                    item.setAction(Some(objc2::sel!(toggleSidebar:)));
+                    return Retained::into_raw(item);
+                } else if item_identifier == objc2_app_kit::NSToolbarToggleInspectorItemIdentifier {
+                    let item = NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier);
+                    let img = NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("sidebar.right"), None);
+                    item.setImage(img.as_deref());
+                    item.setToolTip(Some(objc2_foundation::ns_string!("Toggle Document Sidebar")));
+                    item.setAction(Some(objc2::sel!(toggleInspector:)));
+                    // In some newer macOS, action should be toggleInspector: on NSApp, but NSSplitViewController handles it if we target firstResponder.
+                    return Retained::into_raw(item);
+                }
+            }
+
             let mtm = MainThreadMarker::new().unwrap();
             
             let zoom_in_id = objc2_foundation::ns_string!("ZoomIn");
@@ -304,6 +326,10 @@ define_class!(
             if let Some(sender) = sender {
                 if let Some(segmented) = sender.downcast_ref::<NSSegmentedControl>() {
                     let index = unsafe { segmented.selectedSegment() };
+                    unsafe {
+                        let defaults = objc2_foundation::NSUserDefaults::standardUserDefaults();
+                        defaults.setInteger_forKey(index, objc2_foundation::ns_string!("RightSidebarMode"));
+                    }
                     if let Some(outline_scroll) = self.ivars().right_sidebar_outline_scroll.get() {
                         let thumb_view = self.ivars().thumb_view.get().unwrap();
                         if index == 0 {
@@ -313,6 +339,7 @@ define_class!(
                             unsafe { outline_scroll.setHidden(false) };
                             unsafe { thumb_view.setHidden(true) };
                         }
+                        let _: () = unsafe { objc2::msg_send![self, updateOutlineEmptyState] };
                     }
                 }
             }
@@ -357,12 +384,107 @@ define_class!(
                         
                         let page_count = unsafe { doc.pageCount() };
                         crate::log_pdf!("[DIAGNOSTIC] PDFVIEW AFTER setDocument: pageCount = {}", page_count);
+                        
+                        let _: () = unsafe { objc2::msg_send![self, updateOutlineEmptyState] };
                     } else {
                         crate::log_pdf!("[DIAGNOSTIC] Discarded obsolete doc: {}", path);
                     }
                 }
             } else {
                 crate::log_pdf!("[DIAGNOSTIC] doc is None");
+            }
+        }
+
+        #[unsafe(method(updateOutlineEmptyState))]
+        fn update_outline_empty_state(&self) {
+            unsafe {
+                if let Some(scroll) = self.ivars().right_sidebar_outline_scroll.get() {
+                    if let Some(view) = scroll.documentView() {
+                        if let Some(outline_view) = view.downcast_ref::<NSOutlineView>() {
+                            outline_view.reloadData();
+                            
+                            // Check for outline root
+                            let mut has_outline = false;
+                            if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                                if let Some(doc) = pdf_view.document() {
+                                    if let Some(root) = doc.outlineRoot() {
+                                        if root.numberOfChildren() > 0 {
+                                            has_outline = true;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Let's find or create the empty state view
+                            let empty_tag = 999;
+                            let superview = scroll.superview().unwrap();
+                            let mut existing_empty = None;
+                            let subviews = superview.subviews();
+                            for i in 0..subviews.count() {
+                                let sub = subviews.objectAtIndex(i);
+                                if sub.tag() == empty_tag {
+                                    existing_empty = Some(sub);
+                                    break;
+                                }
+                            }
+                            
+                            if has_outline {
+                                if let Some(empty) = existing_empty.as_ref() {
+                                    empty.removeFromSuperview();
+                                }
+                            } else {
+                                if existing_empty.is_none() {
+                                    let mtm = MainThreadMarker::new().unwrap();
+                                    let empty_view = NSView::initWithFrame(NSView::alloc(mtm), scroll.frame());
+                                    empty_view.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
+                                    let _: () = objc2::msg_send![&empty_view, setTag: empty_tag];
+                                    
+                                    // SF Symbol list.bullet.indent
+                                    let img = NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("list.bullet.indent"), None).unwrap();
+                                    let img_view = NSImageView::imageViewWithImage(&img, mtm);
+                                    img_view.setContentTintColor(Some(&NSColor::tertiaryLabelColor()));
+                                    img_view.setTranslatesAutoresizingMaskIntoConstraints(false);
+                                    
+                                    let label = NSTextField::labelWithString(objc2_foundation::ns_string!("No document outline available"), mtm);
+                                    label.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                                    label.setTranslatesAutoresizingMaskIntoConstraints(false);
+                                    
+                                    empty_view.addSubview(&img_view);
+                                    empty_view.addSubview(&label);
+                                    
+                                    img_view.centerXAnchor().constraintEqualToAnchor(&empty_view.centerXAnchor()).setActive(true);
+                                    img_view.centerYAnchor().constraintEqualToAnchor_constant(&empty_view.centerYAnchor(), -20.0).setActive(true);
+                                    
+                                    
+                                    label.centerXAnchor().constraintEqualToAnchor(&empty_view.centerXAnchor()).setActive(true);
+                                    label.topAnchor().constraintEqualToAnchor_constant(&img_view.bottomAnchor(), 16.0).setActive(true);
+                                    
+                                    // Make sure it doesn't block hits if we need it to, but it's an empty state so it's fine.
+                                    
+                                    // Hidden initially if outline isn't currently selected, but actually it sits on top of scroll, so we want it to show/hide with scroll.
+                                    // A better way: just add it to scroll's superview, and sync its hidden state with scroll's hidden state.
+                                    // Or better yet, we just add it to the content_wrapper, but toggle its visibility in switchSidebar.
+                                    superview.addSubview(&empty_view);
+                                }
+                            }
+                            
+                            // We need to make sure the empty view's hidden state matches the outline scroll view's hidden state.
+                            if let Some(empty) = existing_empty.as_ref() {
+                                empty.setHidden(scroll.isHidden());
+                            } else {
+                                // If we just created it:
+                                let subviews = superview.subviews();
+                                for i in 0..subviews.count() {
+                                    let sub = subviews.objectAtIndex(i);
+                                    if sub.tag() == empty_tag {
+                                        sub.setHidden(scroll.isHidden());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -596,10 +718,19 @@ define_class!(
                 if let Some(view) = obj.downcast_ref::<NSView>() {
                     let frame = view.frame();
                     let width = frame.size.width;
-                    let thumb_width = (width - 40.0).max(50.0);
-                    let thumb_height = thumb_width * 1.414;
+                    
                     if let Some(thumb_view) = self.ivars().thumb_view.get() {
-                        unsafe { thumb_view.setThumbnailSize(NSSize::new(thumb_width, thumb_height)) };
+                        let old_frame = thumb_view.frame();
+                        let new_thumb_width = (width * 0.75).max(50.0);
+                        let new_thumb_height = new_thumb_width * 1.414;
+                        
+                        // Throttle updates: only resize if width changed by > 5pt
+                        if (old_frame.size.width - new_thumb_width).abs() > 5.0 {
+                            unsafe { 
+                                thumb_view.setFrame(NSRect::new(NSPoint::new((width - new_thumb_width) / 2.0, 0.0), NSSize::new(new_thumb_width, frame.size.height)));
+                                thumb_view.setThumbnailSize(NSSize::new(new_thumb_width, new_thumb_height));
+                            }
+                        }
                     }
                 }
             }
@@ -736,7 +867,7 @@ define_class!(
             let main_item = unsafe { NSSplitViewItem::splitViewItemWithViewController(&main_vc) };
 
             // Sidebar View
-            let thumb_view = unsafe { PDFThumbnailView::initWithFrame(PDFThumbnailView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let thumb_view = unsafe { PDFThumbnailView::initWithFrame(PDFThumbnailView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             unsafe {
                 thumb_view.setPDFView(Some(&pdf_view));
                 // Adaptive thumbnail sizes
@@ -753,7 +884,7 @@ define_class!(
             let workspace_del = WorkspaceDelegate::new(mtm);
             let _ = self.ivars().workspace_delegate.set(workspace_del.clone());
 
-            let outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             workspace_del.set_outline_view(&outline_view);
             let column = unsafe { NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), objc2_foundation::ns_string!("MainColumn")) };
             unsafe {
@@ -777,7 +908,7 @@ define_class!(
                 outline_view.setDoubleAction(Some(objc2::sel!(workspaceDoubleClicked:)));
             }
 
-            let outline_scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let outline_scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             unsafe {
                 outline_scroll.setHasVerticalScroller(true);
                 outline_scroll.setDocumentView(Some(&outline_view));
@@ -797,10 +928,10 @@ define_class!(
 
             // RIGHT SIDEBAR (Outline + Pages)
             let pdf_outline_del = crate::pdf_outline::PdfOutlineDelegate::new(mtm, pdf_view.clone());
-            let right_outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let right_outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             let right_col = unsafe { NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), objc2_foundation::ns_string!("OutlineColumn")) };
             unsafe {
-                right_col.setWidth(200.0);
+                right_col.setWidth(230.0);
                 right_outline_view.addTableColumn(&right_col);
                 right_outline_view.setOutlineTableColumn(Some(&right_col));
                 right_outline_view.setHeaderView(None);
@@ -810,7 +941,7 @@ define_class!(
                 let _: () = msg_send![&right_outline_view, setDataSource: del_ptr];
             }
             
-            let right_outline_scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let right_outline_scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             unsafe {
                 right_outline_scroll.setHasVerticalScroller(true);
                 right_outline_scroll.setDocumentView(Some(&right_outline_view));
@@ -819,7 +950,7 @@ define_class!(
                 right_outline_scroll.setHidden(true); // default to Pages
             }
             
-            let right_container = unsafe { NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0))) };
+            let right_container = unsafe { NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             
             let segmented = unsafe { NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
                 &NSArray::from_slice(&[objc2_foundation::ns_string!("Pages"), objc2_foundation::ns_string!("Outline")]),
@@ -829,23 +960,35 @@ define_class!(
                 mtm
             ) };
             unsafe {
-                segmented.setSelected_forSegment(true, 0);
+                let defaults = objc2_foundation::NSUserDefaults::standardUserDefaults();
+                let selected_idx = defaults.integerForKey(objc2_foundation::ns_string!("RightSidebarMode"));
+                segmented.setSelected_forSegment(true, selected_idx);
                 
-                let seg_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 40.0)));
+                if selected_idx == 1 {
+                    right_outline_scroll.setHidden(false);
+                    thumb_view.setHidden(true);
+                } else {
+                    right_outline_scroll.setHidden(true);
+                    thumb_view.setHidden(false);
+                }
+                
+                let seg_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 41.0)));
                 seg_wrapper.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin);
                 seg_wrapper.addSubview(&segmented);
-                // Center it (manual approximation)
-                segmented.setFrameOrigin(NSPoint::new(40.0, 8.0));
-                segmented.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin | objc2_app_kit::NSAutoresizingMaskOptions::ViewMaxXMargin);
                 
-                let separator = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 1.0)));
+                // Add 8-10pt top padding, 10-12pt horizontal padding, 8pt bottom padding.
+                // 41pt height - 8pt top - 8pt bottom = 25pt.
+                segmented.setFrame(NSRect::new(NSPoint::new(12.0, 8.0), NSSize::new(230.0 - 24.0, 25.0)));
+                segmented.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
+                
+                let separator = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 1.0)));
                 separator.setWantsLayer(true);
                 if let Some(layer) = separator.layer() {
                     let cg = objc2_app_kit::NSColor::separatorColor().CGColor(); let ptr = Retained::as_ptr(&cg); let _: () = msg_send![&layer, setBackgroundColor: ptr];
                 }
                 separator.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin);
                 
-                let content_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 660.0)));
+                let content_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 660.0)));
                 content_wrapper.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
                 content_wrapper.addSubview(&thumb_view);
                 content_wrapper.addSubview(&right_outline_scroll);
@@ -866,9 +1009,9 @@ define_class!(
 
                 
                 // Layout adjustment
-                seg_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 40.0), NSSize::new(200.0, 40.0)));
-                separator.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 41.0), NSSize::new(200.0, 1.0)));
-                content_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 700.0 - 41.0)));
+                seg_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 40.0), NSSize::new(230.0, 41.0)));
+                separator.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 41.0), NSSize::new(230.0, 1.0)));
+                content_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0 - 41.0)));
             }
 
             let navigation_vc = NSViewController::new(mtm);

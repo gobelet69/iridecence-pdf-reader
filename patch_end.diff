@@ -1,0 +1,10 @@
+--- src/main.rs
++++ src/main.rs
+@@ -470,3 +470,6 @@
+ 
+ impl AppDelegate {
++    fn new(mtm: MainThreadMarker) -> Retained<Self> {
++        let this = Self::alloc(mtm).set_ivars(AppDelegateIvars::default());
++        unsafe { msg_send![super(this), init] }
++    }
++}

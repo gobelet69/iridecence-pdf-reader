@@ -1,0 +1,2 @@
+objc2::rc::Retained<objc2_app_kit::NSView>: objc2::Encode
+std::option::Option<objc2::rc::Retained<objc2_app_kit::NSView>>
