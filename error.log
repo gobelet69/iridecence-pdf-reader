@@ -1,0 +1,861 @@
+    Checking oxireader v0.1.0 (/Users/theodeville/Documents/OxiReader)
+warning: unused import: `objc2_foundation::NSInteger`
+ --> src/main.rs:5:5
+  |
+5 | use objc2_foundation::NSInteger;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `ClassType`
+  --> src/main.rs:38:42
+   |
+38 | use objc2::{define_class, msg_send, sel, ClassType, DeclaredClass, MainThreadOnly, AnyThread};
+   |                                          ^^^^^^^^^
+
+warning: unused imports: `PathBuf` and `Path`
+ --> src/workspace.rs:3:17
+  |
+3 | use std::path::{Path, PathBuf};
+  |                 ^^^^  ^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace.rs:61:57
+   |
+61 |         let this: objc2::rc::Allocated<Self> = unsafe { objc2::msg_send_id![Self::class(), alloc] };
+   |                                                         ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace.rs:63:45
+   |
+63 |         let node: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+   |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NSNumber`
+   --> src/workspace.rs:110:65
+    |
+110 |                         use objc2_foundation::{NSURL, NSString, NSNumber};
+    |                                                                 ^^^^^^^^
+
+warning: unused import: `NSControl`
+ --> src/workspace_delegate.rs:1:89
+  |
+1 | use objc2_app_kit::{NSOutlineView, NSTableColumn, NSTableCellView, NSTextField, NSView, NSControl, NSUserInterfaceItemIdentification, NSR...
+  |                                                                                         ^^^^^^^^^
+
+warning: unused import: `NSObject`
+ --> src/workspace_delegate.rs:7:24
+  |
+7 | use objc2_foundation::{NSObject, NSObjectProtocol, NSInteger, NSRect, NSPoint, NSSize, MainThreadMarker, NSString};
+  |                        ^^^^^^^^
+
+warning: unused import: `msg_send`
+ --> src/workspace_delegate.rs:8:57
+  |
+8 | use objc2::{define_class, MainThreadOnly, DefinedClass, msg_send};
+  |                                                         ^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace_delegate.rs:35:94
+   |
+35 |                 let node: Option<objc2::rc::Retained<crate::workspace::FileNode>> = unsafe { objc2::msg_send_id![notification, object] };
+   |                                                                                              ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace_delegate.rs:57:81
+   |
+57 |         let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send_id![notification, object] };
+   |                                                                                 ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace_delegate.rs:69:87
+   |
+69 |         let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send_id![&outline_view, target] };
+   |                                                                                       ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/workspace_delegate.rs:273:45
+    |
+273 |         let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ClassType`, `MainThreadMarker`, and `msg_send`
+ --> src/debug_console.rs:1:27
+  |
+1 | use objc2::{define_class, msg_send, sel, ClassType, DeclaredClass, MainThreadMarker, MainThreadOnly, runtime::AnyObject};
+  |                           ^^^^^^^^       ^^^^^^^^^                 ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `NSBezelStyle`, `NSVisualEffectBlendingMode`, `NSVisualEffectMaterial`, `NSVisualEffectState`, and `NSVisualEffectView`
+ --> src/debug_console.rs:2:136
+  |
+2 | ...n, NSBezelStyle, NSUserInterfaceLayoutOrientation, NSVisualEffectView, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectBlendingMode};
+  |       ^^^^^^^^^^^^                                    ^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NSThread`
+ --> src/debug_console.rs:3:59
+  |
+3 | use objc2_foundation::{NSRect, NSPoint, NSSize, NSString, NSThread};
+  |                                                           ^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/debug_console.rs:108:45
+    |
+108 |         let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `NSBezelStyle`, `NSGlassEffectViewStyle`, `NSGlassEffectView`, `NSImageSymbolConfiguration`, `NSImageSymbolScale`, `NSModalResponseOK`, `NSOutlineViewDataSource`, `NSOutlineViewDelegate`, `NSSplitView`, `NSUserInterfaceLayoutOrientation`, and `NSVisualEffectView`
+  --> src/main.rs:45:21
+   |
+45 | use objc2_app_kit::{NSVisualEffectView, 
+   |                     ^^^^^^^^^^^^^^^^^^
+46 |     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSBackingStoreType, 
+47 |     NSWindow, NSWindowStyleMask, NSOpenPanel, NSModalResponseOK,
+   |                                               ^^^^^^^^^^^^^^^^^
+48 |     NSSplitViewController, NSSplitView, NSSplitViewItem, NSViewController,
+   |                            ^^^^^^^^^^^
+49 |     NSToolbar, NSToolbarDelegate, NSToolbarItem, NSWindowToolbarStyle,
+50 |     NSGlassEffectView, NSGlassEffectViewStyle, NSToolbarItemIdentifier,
+   |     ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^
+51 |     NSToolbarDisplayMode, NSMenu, NSMenuItem, NSStackView, NSView, NSButton,
+52 |     NSUserInterfaceLayoutOrientation, NSBezelStyle, NSSegmentedControl, NSSegmentSwitchTracking,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+53 |     NSScrollView, NSOutlineView, NSTableColumn, NSOutlineViewDelegate, NSOutlineViewDataSource, NSImage, NSImageView, NSColor, NSTextField, NSImageSymbolConfiguration, NSImageSymbolScale
+   |                                                 ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+    --> src/main.rs:1111:18
+     |
+1111 |         unsafe { objc2::msg_send_id![super(this), init] }
+     |                  ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `objc2_app_kit::NSOutlineView`
+    --> src/main.rs:1132:17
+     |
+1132 |             use objc2_app_kit::NSOutlineView;
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `msg_send`
+    --> src/test_outline.rs:1:13
+     |
+   1 | use objc2::{msg_send, rc::Retained};
+     |             ^^^^^^^^
+     |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+    --> src/main.rs:1353:1
+     |
+1353 | mod test_outline;
+     | ^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ClassType`, `msg_send`, and `sel`
+ --> src/pdf_outline.rs:1:27
+  |
+1 | use objc2::{define_class, msg_send, msg_send_id, sel, ClassType, DeclaredClass, MainThreadOnly, AnyThread};
+  |                           ^^^^^^^^               ^^^  ^^^^^^^^^
+
+warning: unused import: `std::cell::RefCell`
+ --> src/pdf_outline.rs:5:5
+  |
+5 | use std::cell::RefCell;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/pdf_outline.rs:144:45
+    |
+144 |         let this: Retained<Self> = unsafe { msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+ --> src/pdf_outline.rs:1:37
+  |
+1 | use objc2::{define_class, msg_send, msg_send_id, sel, ClassType, DeclaredClass, MainThreadOnly, AnyThread};
+  |                                     ^^^^^^^^^^^
+
+warning: use of deprecated associated constant `objc2_app_kit::NSBezelStyle::Inline`
+   --> src/workspace_delegate.rs:153:77
+    |
+153 |                         cloud_iv.setBezelStyle(objc2_app_kit::NSBezelStyle::Inline);
+    |                                                                             ^^^^^^
+
+warning: use of deprecated method `objc2_app_kit::NSWorkspace::iconForFileType`: Use -[NSWorkspace iconForContentType:] instead.
+   --> src/workspace_delegate.rs:276:38
+    |
+276 |         let folder_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
+    |                                      ^^^^^^^^^^^^^^^
+
+warning: use of deprecated method `objc2_app_kit::NSWorkspace::iconForFileType`: Use -[NSWorkspace iconForContentType:] instead.
+   --> src/workspace_delegate.rs:277:35
+    |
+277 |         let doc_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("pdf")) };
+    |                                   ^^^^^^^^^^^^^^^
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+   --> src/main.rs:820:35
+    |
+820 |             let screen = unsafe { objc2_app_kit::NSScreen::mainScreen() };
+    |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-- argument #1 of type `objc2_foundation::MainThreadMarker` is missing
+    |
+note: associated function defined here
+   --> /Users/theodeville/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/objc2-app-kit-0.3.2/src/generated/NSScreen.rs:37:16
+    |
+ 37 |         pub fn mainScreen(mtm: MainThreadMarker) -> Option<Retained<NSScreen>>;
+    |                ^^^^^^^^^^
+help: provide the argument
+    |
+820 |             let screen = unsafe { objc2_app_kit::NSScreen::mainScreen(/* objc2_foundation::MainThreadMarker */) };
+    |                                                                       ++++++++++++++++++++++++++++++++++++++++
+
+warning: use of deprecated associated constant `objc2_app_kit::NSTableViewSelectionHighlightStyle::SourceList`: Set the NSTableView.style property to NSTableViewStyleSourceList instead.
+   --> src/main.rs:912:108
+    |
+912 |                 outline_view.setSelectionHighlightStyle(objc2_app_kit::NSTableViewSelectionHighlightStyle::SourceList);
+    |                                                                                                            ^^^^^^^^^^
+
+warning: unused import: `AnyThread`
+ --> src/pdf_outline.rs:1:97
+  |
+1 | use objc2::{define_class, msg_send, msg_send_id, sel, ClassType, DeclaredClass, MainThreadOnly, AnyThread};
+  |                                                                                                 ^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> src/workspace.rs:39:21
+   |
+39 |                 let mut child = FileNode::new(path, name, is_dir);
+   |                     ----^^^^^
+   |                     |
+   |                     help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: unnecessary `unsafe` block
+  --> src/workspace_delegate.rs:59:28
+   |
+59 |         let selected_row = unsafe { outline_view.selectedRow() };
+   |                            ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+  --> src/workspace_delegate.rs:61:33
+   |
+61 |             if let Some(item) = unsafe { outline_view.itemAtRow(selected_row) } {
+   |                                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `symbol_name`
+   --> src/workspace_delegate.rs:180:17
+    |
+180 | ...   let symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
+    |           ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_symbol_name`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:127:28
+    |
+127 | ...   let cell = unsafe { NSTableCellView::initWithFrame(NSTableCellView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200...
+    |                  ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:128:17
+    |
+128 |                 unsafe { cell.setIdentifier(Some(id)) };
+    |                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:130:34
+    |
+130 | ...   let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::ne...
+    |                        ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:131:34
+    |
+131 | ...   let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(156....
+    |                        ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:148:36
+    |
+148 | ...   let cloud_iv = unsafe { objc2_app_kit::NSButton::initWithFrame(objc2_app_kit::NSButton::alloc(mtm), NSRect::new(NSPoint::new(180.0,...
+    |                      ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:149:21
+    |
+132 |                 unsafe {
+    |                 ------ because it's nested under this `unsafe` block
+...
+149 |                     unsafe {
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:164:21
+    |
+164 |                     unsafe { progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress"))) };
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:184:21
+    |
+184 |                     unsafe { iv.setImage(None) }; // No icon for loading placeholder
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:186:21
+    |
+186 |                     unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemBlueColor())) };
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:188:25
+    |
+188 |                         unsafe { iv.setImage(Some(img)) };
+    |                         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:191:21
+    |
+191 |                     unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor())) };
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:193:25
+    |
+193 |                         unsafe { iv.setImage(Some(img)) };
+    |                         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:261:17
+    |
+261 |                 unsafe { tf.setStringValue(&NSString::from_str(name_str)) };
+    |                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:262:17
+    |
+262 |                 unsafe { table_cell.setToolTip(Some(&NSString::from_str(path_str))) };
+    |                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:275:18
+    |
+275 |         let ws = unsafe { objc2_app_kit::NSWorkspace::sharedWorkspace() };
+    |                  ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:276:26
+    |
+276 |         let folder_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
+    |                          ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/workspace_delegate.rs:277:23
+    |
+277 |         let doc_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("pdf")) };
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/debug_console.rs:32:13
+   |
+32 |             unsafe { self.ivars().text_view.setString(&NSString::from_str("")) };
+   |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/debug_console.rs:41:21
+   |
+41 |                     unsafe { btn.setTitle(&NSString::from_str("Resume")) };
+   |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/debug_console.rs:43:21
+   |
+43 |                     unsafe { btn.setTitle(&NSString::from_str("Pause")) };
+   |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/debug_console.rs:50:21
+   |
+50 |                     unsafe { self.ivars().text_view.setString(&NSString::from_str(&all_text)) };
+   |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/debug_console.rs:60:17
+   |
+60 |                 unsafe { btn.setState(if !auto { 1 } else { 0 }) };
+   |                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/debug_console.rs:92:71
+   |
+83 |     unsafe {
+   |     ------ because it's nested under this `unsafe` block
+...
+92 |             let window = { let vc_retained: &DebugConsoleController = unsafe { &*(vc as *const _) }; vc_retained.ivars().window.get().unw...
+   |                                                                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:101:25
+    |
+101 | ...   let text_view = unsafe { NSTextView::initWithFrame(NSTextView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 5...
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:118:9
+    |
+118 |         unsafe { window.setTitle(&NSString::from_str("Live Debug Console")) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:121:21
+    |
+121 |         let stack = unsafe { NSStackView::initWithFrame(NSStackView::alloc(mtm), rect) };
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:122:9
+    |
+122 |         unsafe { stack.setOrientation(NSUserInterfaceLayoutOrientation::Vertical) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:123:9
+    |
+123 |         unsafe { stack.setSpacing(0.0) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:125:23
+    |
+125 | ...   let toolbar = unsafe { NSStackView::initWithFrame(NSStackView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 4...
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:126:9
+    |
+126 |         unsafe { toolbar.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:127:9
+    |
+127 |         unsafe { toolbar.setSpacing(10.0) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:128:9
+    |
+128 |         unsafe { toolbar.setEdgeInsets(objc2_foundation::NSEdgeInsets { top: 10.0, left: 10.0, bottom: 10.0, right: 10.0 }) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:133:9
+    |
+133 |         unsafe { btn_autoscroll.setState(1) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:135:9
+    |
+135 |         unsafe { toolbar.addView_inGravity(&btn_clear, objc2_app_kit::NSStackViewGravity::Leading) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:136:9
+    |
+136 |         unsafe { toolbar.addView_inGravity(&btn_pause, objc2_app_kit::NSStackViewGravity::Leading) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:137:9
+    |
+137 |         unsafe { toolbar.addView_inGravity(&btn_autoscroll, objc2_app_kit::NSStackViewGravity::Leading) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:139:22
+    |
+139 | ...   let scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, ...
+    |                    ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:140:9
+    |
+140 |         unsafe { scroll.setHasVerticalScroller(true) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:141:9
+    |
+141 |         unsafe { scroll.setAutohidesScrollers(true) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:143:9
+    |
+143 |         unsafe { this.ivars().text_view.setEditable(false) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:144:9
+    |
+144 |         unsafe { this.ivars().text_view.setSelectable(true) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:145:9
+    |
+145 |         unsafe { this.ivars().text_view.setRichText(false) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:146:9
+    |
+146 |         unsafe { this.ivars().text_view.setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(12.0, 0.0))) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:147:9
+    |
+147 |         unsafe { this.ivars().text_view.setTextColor(Some(&*NSColor::textColor())) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:148:9
+    |
+148 |         unsafe { this.ivars().text_view.setBackgroundColor(&NSColor::textBackgroundColor()) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:150:9
+    |
+150 |         unsafe { scroll.setDocumentView(Some(&*this.ivars().text_view)) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:151:9
+    |
+151 |         unsafe { stack.addView_inGravity(&toolbar, objc2_app_kit::NSStackViewGravity::Top) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:152:9
+    |
+152 |         unsafe { stack.addView_inGravity(&scroll, objc2_app_kit::NSStackViewGravity::Top) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:153:9
+    |
+153 |         unsafe { window.setContentView(Some(&stack)) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/debug_console.rs:162:9
+    |
+162 |         unsafe { this.ivars().text_view.setString(&NSString::from_str(&all_text)) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `sidebar_tabs_id`
+   --> src/main.rs:124:17
+    |
+124 |             let sidebar_tabs_id = objc2_foundation::ns_string!("SidebarTabs");
+    |                 ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sidebar_tabs_id`
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:129:28
+    |
+129 |                 let item = unsafe { NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier) };
+    |                            ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:140:28
+    |
+140 |                 let item = unsafe { NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier) };
+    |                            ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:151:28
+    |
+151 |                 let item = unsafe { NSToolbarItem::initWithItemIdentifier(NSToolbarItem::alloc(mtm), item_identifier) };
+    |                            ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:203:13
+    |
+203 |             unsafe {
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:207:16
+    |
+207 |             if unsafe { panel.runModal() } == objc2_app_kit::NSModalResponseOK {
+    |                ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:208:36
+    |
+208 |                 if let Some(url) = unsafe { panel.URL() } {
+    |                                    ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:219:30
+    |
+219 |             let split_view = unsafe { split_vc.splitView() };
+    |                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:220:13
+    |
+220 |             unsafe { split_view.setDividerStyle(objc2_app_kit::NSSplitViewDividerStyle::Thin) };
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:222:13
+    |
+222 |             unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:233:13
+    |
+233 |             unsafe {
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:237:16
+    |
+237 |             if unsafe { panel.runModal() } == objc2_app_kit::NSModalResponseOK {
+    |                ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:238:36
+    |
+238 |                 if let Some(url) = unsafe { panel.URL() } {
+    |                                    ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:246:30
+    |
+246 |             let split_view = unsafe { split_vc.splitView() };
+    |                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:247:13
+    |
+247 |             unsafe { split_view.setDividerStyle(objc2_app_kit::NSSplitViewDividerStyle::Thin) };
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:249:13
+    |
+249 |             unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:259:49
+    |
+259 | ...                   if let Some(view) = unsafe { scroll.documentView() } {
+    |                                           ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:261:87
+    |
+261 | ...                   crate::log_workspace!("Reloading outline view!"); unsafe { outline.reloadData() };
+    |                                                                         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:301:30
+    |
+301 |             let split_view = unsafe { split_vc.splitView() };
+    |                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:302:13
+    |
+302 |             unsafe { split_view.setDividerStyle(objc2_app_kit::NSSplitViewDividerStyle::Thin) };
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:304:13
+    |
+304 |             unsafe { window.setContentViewController(Some(&*self.ivars().split_vc.get().unwrap())) };
+    |             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:312:49
+    |
+312 | ...                   if let Some(view) = unsafe { scroll.documentView() } {
+    |                                           ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:314:37
+    |
+314 | ...                   unsafe { outline.reloadData() };
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:328:33
+    |
+328 |                     let index = unsafe { segmented.selectedSegment() };
+    |                                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:329:21
+    |
+329 |                     unsafe {
+    |                     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:336:29
+    |
+336 | ...                   unsafe { outline_scroll.setHidden(true) };
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:337:29
+    |
+337 | ...                   unsafe { thumb_view.setHidden(false) };
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:339:29
+    |
+339 | ...                   unsafe { outline_scroll.setHidden(false) };
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:340:29
+    |
+340 | ...                   unsafe { thumb_view.setHidden(true) };
+    |                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:352:39
+    |
+352 |                     let clicked_row = unsafe { outline.clickedRow() };
+    |                                       ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:354:45
+    |
+354 |                         if let Some(item) = unsafe { outline.itemAtRow(clicked_row) } {
+    |                                             ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `url`
+   --> src/main.rs:512:37
+    |
+512 | ...                   let url = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
+    |                           ^^^ help: if this is intentional, prefix it with an underscore: `_url`
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:508:45
+    |
+508 |                         if let Some(item) = unsafe { outline.itemAtRow(selected_row) } {
+    |                                             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:512:43
+    |
+512 | ...                   let url = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
+    |                                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:578:53
+    |
+578 | ...                   let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
+    |                                   ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:628:29
+    |
+628 |                 let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(path) };
+    |                             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:667:25
+    |
+667 |             let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(path) };
+    |                         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/main.rs:717:32
+    |
+717 |             if let Some(obj) = unsafe { notification.object() } {
+    |                                ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `outline_raw`
+    --> src/main.rs:1126:39
+     |
+1126 | pub fn download_file(url_str: String, outline_raw: usize, app_ptr: usize) {
+     |                                       ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_outline_raw`
+
+warning: unused variable: `lbl`
+  --> src/test_outline.rs:11:21
+   |
+11 |                 let lbl = unsafe { c.label() };
+   |                     ^^^ help: if this is intentional, prefix it with an underscore: `_lbl`
+
+warning: unused variable: `outline_view`
+   --> src/pdf_outline.rs:66:48
+    |
+ 66 |         fn outlineView_isItemExpandable(&self, outline_view: &NSOutlineView, item: &AnyObject) -> bool {
+    |                                                ^^^^^^^^^^^^
+    |
+help: `outline_view` is captured in macro and introduced a unused variable
+   --> src/pdf_outline.rs:14:1
+    |
+ 14 | / define_class!(
+ 15 | |     #[unsafe(super(NSObject))]
+ 16 | |     #[thread_kind = MainThreadOnly]
+ 17 | |     #[name = "PdfOutlineDelegate"]
+...   |
+139 | | );
+    | |_^
+    = note: this warning originates in the macro `$crate::__define_class_rewrite_params` which comes from the expansion of the macro `define_class` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unnecessary `unsafe` block
+  --> src/pdf_outline.rs:84:28
+   |
+84 | ...   let cell = unsafe { NSTableCellView::initWithFrame(NSTableCellView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200...
+   |                  ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/pdf_outline.rs:85:17
+   |
+85 |                 unsafe { cell.setIdentifier(Some(identifier)) };
+   |                 ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src/pdf_outline.rs:87:34
+   |
+87 |                 let text_field = unsafe { NSTextField::labelWithString(ns_string!(""), mtm) };
+   |                                  ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/pdf_outline.rs:105:25
+    |
+105 |                         unsafe { tf.setStringValue(&label) };
+    |                         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/pdf_outline.rs:118:32
+    |
+118 |             if let Some(obj) = unsafe { notification.object() } {
+    |                                ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/pdf_outline.rs:120:31
+    |
+120 |                     let row = unsafe { outline_view.selectedRow() };
+    |                               ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/pdf_outline.rs:122:45
+    |
+122 |                         if let Some(item) = unsafe { outline_view.itemAtRow(row) } {
+    |                                             ^^^^^^ unnecessary `unsafe` block
+
+For more information about this error, try `rustc --explain E0061`.
+warning: `oxireader` (bin "oxireader") generated 132 warnings
+error: could not compile `oxireader` (bin "oxireader") due to 1 previous error; 132 warnings emitted

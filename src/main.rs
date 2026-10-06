@@ -75,6 +75,8 @@ struct AppDelegateIvars {
     navigation_item: OnceCell<Retained<NSSplitViewItem>>,
     right_sidebar_outline_scroll: OnceCell<Retained<NSScrollView>>,
     pdf_outline_delegate: OnceCell<Retained<crate::pdf_outline::PdfOutlineDelegate>>,
+    main_vc: OnceCell<Retained<NSViewController>>,
+    welcome_view: OnceCell<Retained<NSView>>,
 }
 
 define_class!(
@@ -380,10 +382,19 @@ define_class!(
                     crate::log_pdf!("[DIAGNOSTIC] path = {}", path);
                     if path == *self.ivars().pending_pdf_path.borrow() {
                         crate::log_pdf!("[DIAGNOSTIC] PDFVIEW BEFORE setDocument");
-                        unsafe { self.ivars().pdf_view.get().unwrap().setDocument(Some(doc)) };
+                        let pdf_view = self.ivars().pdf_view.get().unwrap();
+                        unsafe { pdf_view.setDocument(Some(doc)) };
                         
                         let page_count = unsafe { doc.pageCount() };
                         crate::log_pdf!("[DIAGNOSTIC] PDFVIEW AFTER setDocument: pageCount = {}", page_count);
+                        
+                        if let Some(main_vc) = self.ivars().main_vc.get() {
+                            unsafe { main_vc.setView(&**pdf_view) };
+                        }
+                        crate::add_recent_item(&path);
+                        if let Some(explorer_item) = self.ivars().explorer_item.get() {
+                            unsafe { explorer_item.setCollapsed(true) };
+                        }
                         
                         let _: () = unsafe { objc2::msg_send![self, updateOutlineEmptyState] };
                     } else {
@@ -766,6 +777,24 @@ define_class!(
             crate::debug_console::show_debug_console();
         }
         
+        #[unsafe(method(search:))]
+        fn search(&self, _sender: Option<&AnyObject>) {}
+
+        #[unsafe(method(goBack:))]
+        fn go_back(&self, _sender: Option<&AnyObject>) {}
+
+        #[unsafe(method(goForward:))]
+        fn go_forward(&self, _sender: Option<&AnyObject>) {}
+
+        #[unsafe(method(restoreReadingPosition:))]
+        fn restore_reading_position(&self, _sender: Option<&AnyObject>) {}
+
+        #[unsafe(method(quickOpen:))]
+        fn quick_open(&self, _sender: Option<&AnyObject>) {}
+
+        #[unsafe(method(commandPalette:))]
+        fn command_palette(&self, _sender: Option<&AnyObject>) {}
+
         #[unsafe(method(applicationDidFinishLaunching:))]
 
         fn application_did_finish_launching(&self, _notification: *mut objc2_foundation::NSNotification) {
@@ -813,7 +842,27 @@ define_class!(
                 }
 
                 
-                NSApplication::sharedApplication(mtm).setMainMenu(Some(&menubar));
+                
+                let go_menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Go"), None, &objc2_foundation::NSString::from_str(""));
+                let go_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &objc2_foundation::NSString::from_str("Go"));
+                
+                let search_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Search..."), Some(objc2::sel!(search:)), &objc2_foundation::NSString::from_str("f"));
+                let go_back_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Back"), Some(objc2::sel!(goBack:)), &objc2_foundation::NSString::from_str("["));
+                let go_forward_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Forward"), Some(objc2::sel!(goForward:)), &objc2_foundation::NSString::from_str("]"));
+                let quick_open_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Quick Open..."), Some(objc2::sel!(quickOpen:)), &objc2_foundation::NSString::from_str("p"));
+                let cmd_palette_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Command Palette..."), Some(objc2::sel!(commandPalette:)), &objc2_foundation::NSString::from_str("P"));
+                
+                unsafe {
+                    go_menu.addItem(&search_item);
+                    go_menu.addItem(&go_back_item);
+                    go_menu.addItem(&go_forward_item);
+                    go_menu.addItem(&quick_open_item);
+                    go_menu.addItem(&cmd_palette_item);
+                    go_menu_item.setSubmenu(Some(&go_menu));
+                    menubar.addItem(&go_menu_item);
+                    NSApplication::sharedApplication(mtm).setMainMenu(Some(&menubar));
+                }
+    
             }
 
             
@@ -862,6 +911,7 @@ define_class!(
                 pdf_view.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
             }
             let main_vc = NSViewController::new(mtm);
+            self.ivars().main_vc.set(main_vc.clone()).unwrap();
             unsafe { main_vc.setView(&pdf_view) };
 
             let main_item = unsafe { NSSplitViewItem::splitViewItemWithViewController(&main_vc) };
@@ -1334,3 +1384,35 @@ pub fn refresh_file_status(url_str: String, item_raw: usize, outline_raw: usize,
 }
 mod test_outline;
 mod pdf_outline;
+
+pub fn add_recent_item(path: &str) {
+    unsafe {
+        let defaults = objc2_foundation::NSUserDefaults::standardUserDefaults();
+        let key = objc2_foundation::NSString::from_str("RecentItems");
+        let mut items = std::vec::Vec::new();
+        if let Some(arr) = defaults.arrayForKey(&key) {
+            for i in 0..arr.count() {
+                if let Some(obj) = arr.objectAtIndex(i).downcast_ref::<objc2_foundation::NSString>() {
+                    items.push(obj.to_string());
+                }
+            }
+        }
+        items.retain(|x| x != path);
+        items.insert(0, path.to_string());
+        if items.len() > 10 {
+            items.truncate(10);
+        }
+        
+        let mtm = objc2_foundation::MainThreadMarker::new().unwrap();
+        let mut ns_strs = std::vec::Vec::new();
+        for item in &items {
+            ns_strs.push(objc2_foundation::NSString::from_str(item));
+        }
+        let mut refs = std::vec::Vec::new();
+        for ns in &ns_strs {
+            refs.push(&**ns);
+        }
+        let ns_items = objc2_foundation::NSArray::from_slice(&refs);
+        defaults.setObject_forKey(Some(&ns_items), &key);
+    }
+}
