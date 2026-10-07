@@ -1,0 +1,244 @@
+    Checking oxireader v0.1.0 (/Users/theodeville/Documents/OxiReader)
+error[E0405]: cannot find trait `MainThreadOnly` in this scope
+  --> src/palette.rs:22:21
+   |
+22 |     #[thread_kind = MainThreadOnly]
+   |                     ^^^^^^^^^^^^^^ not found in this scope
+   |
+help: consider importing one of these traits
+   |
+ 1 + use crate::MainThreadOnly;
+   |
+ 1 + use objc2::MainThreadOnly;
+   |
+
+warning: unused import: `objc2_foundation::NSInteger`
+ --> src/main.rs:7:5
+  |
+7 | use objc2_foundation::NSInteger;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `ClassType`
+  --> src/main.rs:40:24
+   |
+40 | use objc2::{AnyThread, ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, sel};
+   |                        ^^^^^^^^^
+
+warning: unused imports: `ClassType`, `MainThreadMarker`, and `msg_send`
+ --> src/debug_console.rs:3:5
+  |
+3 |     ClassType, DeclaredClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
+  |     ^^^^^^^^^                 ^^^^^^^^^^^^^^^^                                ^^^^^^^^
+
+warning: unused imports: `NSBezelStyle`, `NSVisualEffectBlendingMode`, `NSVisualEffectMaterial`, `NSVisualEffectState`, and `NSVisualEffectView`
+ --> src/debug_console.rs:7:25
+  |
+7 |     NSBackingStoreType, NSBezelStyle, NSButton, NSColor, NSFont, NSScrollView, NSStackView,
+  |                         ^^^^^^^^^^^^
+8 |     NSTextView, NSUserInterfaceLayoutOrientation, NSVisualEffectBlendingMode,
+  |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+9 |     NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowStyleMask,
+  |     ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NSThread`
+  --> src/debug_console.rs:11:59
+   |
+11 | use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSThread};
+   |                                                           ^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/debug_console.rs:122:45
+    |
+122 |         let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: unused imports: `PathBuf` and `Path`
+ --> src/workspace.rs:6:17
+  |
+6 | use std::path::{Path, PathBuf};
+  |                 ^^^^  ^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace.rs:61:57
+   |
+61 |         let this: objc2::rc::Allocated<Self> = unsafe { objc2::msg_send_id![Self::class(), alloc] };
+   |                                                         ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace.rs:63:45
+   |
+63 |         let node: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+   |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NSNumber`
+   --> src/workspace.rs:120:48
+    |
+120 |                         use objc2_foundation::{NSNumber, NSString, NSURL};
+    |                                                ^^^^^^^^
+
+warning: unused imports: `ClassType` and `sel`
+ --> src/palette.rs:2:50
+  |
+2 | use objc2::{define_class, msg_send, msg_send_id, ClassType, sel};
+  |                                                  ^^^^^^^^^  ^^^
+
+warning: unused import: `ProtocolObject`
+ --> src/palette.rs:3:33
+  |
+3 | use objc2::runtime::{AnyObject, ProtocolObject};
+  |                                 ^^^^^^^^^^^^^^
+
+warning: unused import: `NSLineBreakMode`
+ --> src/palette.rs:7:28
+  |
+7 |     NSView, NSTableColumn, NSLineBreakMode, NSColor, NSBackingStoreType, NSWindowLevel, NSWindowCollectionBehavior
+  |                            ^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/palette.rs:126:45
+    |
+126 |         let this: Retained<Self> = unsafe { msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^
+
+warning: unused import: `msg_send`
+ --> src/workspace_delegate.rs:5:57
+  |
+5 | use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send};
+  |                                                         ^^^^^^^^
+
+warning: unused import: `NSControl`
+ --> src/workspace_delegate.rs:7:5
+  |
+7 |     NSControl, NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
+  |     ^^^^^^^^^
+
+warning: unused import: `NSObject`
+  --> src/workspace_delegate.rs:11:34
+   |
+11 |     MainThreadMarker, NSInteger, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+   |                                  ^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace_delegate.rs:40:94
+   |
+40 |                 let node: Option<objc2::rc::Retained<crate::workspace::FileNode>> = unsafe { objc2::msg_send_id![notification, object] };
+   |                                                                                              ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace_delegate.rs:62:81
+   |
+62 |         let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send_id![notification, object] };
+   |                                                                                 ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+  --> src/workspace_delegate.rs:74:87
+   |
+74 |         let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send_id![&outline_view, target] };
+   |                                                                                       ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/workspace_delegate.rs:277:45
+    |
+277 |         let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `NSBezelStyle`, `NSGlassEffectViewStyle`, `NSGlassEffectView`, `NSImageSymbolConfiguration`, `NSImageSymbolScale`, `NSModalResponseOK`, `NSOutlineViewDataSource`, `NSOutlineViewDelegate`, `NSSplitView`, `NSUserInterfaceLayoutOrientation`, and `NSVisualEffectView`
+  --> src/main.rs:50:5
+   |
+50 |     NSBezelStyle, NSButton, NSColor, NSGlassEffectView, NSGlassEffectViewStyle, NSImage,
+   |     ^^^^^^^^^^^^                     ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^
+51 |     NSImageSymbolConfiguration, NSImageSymbolScale, NSImageView, NSMenu, NSMenuItem,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+52 |     NSModalResponseOK, NSOpenPanel, NSOutlineView, NSOutlineViewDataSource, NSOutlineViewDelegate,
+   |     ^^^^^^^^^^^^^^^^^                              ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^
+53 |     NSScreen, NSScrollView, NSSegmentSwitchTracking, NSSegmentedControl, NSSplitView,
+   |                                                                          ^^^^^^^^^^^
+...
+56 |     NSUserInterfaceLayoutOrientation, NSView, NSViewController, NSVisualEffectView, NSWindow,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                            ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NSUserDefaults`
+  --> src/main.rs:61:22
+   |
+61 |     NSString, NSURL, NSUserDefaults,
+   |                      ^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+    --> src/main.rs:1589:18
+     |
+1589 |         unsafe { objc2::msg_send_id![super(this), init] }
+     |                  ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `objc2_app_kit::NSOutlineView`
+    --> src/main.rs:1608:13
+     |
+1608 |         use objc2_app_kit::NSOutlineView;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ClassType`, `msg_send`, and `sel`
+ --> src/pdf_outline.rs:4:16
+  |
+4 |     AnyThread, ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id, sel,
+  |                ^^^^^^^^^                                               ^^^^^^^^               ^^^
+
+warning: unused import: `std::cell::RefCell`
+ --> src/pdf_outline.rs:9:5
+  |
+9 | use std::cell::RefCell;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/pdf_outline.rs:182:45
+    |
+182 |         let this: Retained<Self> = unsafe { msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^
+
+warning: unused imports: `ClassType`, `msg_send`, and `sel`
+ --> src/pdf_search.rs:3:13
+  |
+3 | use objc2::{ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id, sel};
+  |             ^^^^^^^^^                                               ^^^^^^^^               ^^^
+
+warning: use of deprecated macro `msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+   --> src/pdf_search.rs:194:45
+    |
+194 |         let this: Retained<Self> = unsafe { msg_send_id![super(this), init] };
+    |                                             ^^^^^^^^^^^
+
+warning: unused import: `msg_send`
+    --> src/test_outline.rs:1:13
+     |
+   1 | use objc2::{msg_send, rc::Retained};
+     |             ^^^^^^^^
+     |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+    --> src/main.rs:1868:1
+     |
+1868 | mod test_outline;
+     | ^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+ --> src/palette.rs:2:37
+  |
+2 | use objc2::{define_class, msg_send, msg_send_id, ClassType, sel};
+  |                                     ^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+ --> src/pdf_outline.rs:4:82
+  |
+4 |     AnyThread, ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id, sel,
+  |                                                                                  ^^^^^^^^^^^
+
+warning: use of deprecated macro `objc2::msg_send_id`: use a normal msg_send! instead, it will now perform the conversion to/from `Retained` for you
+ --> src/pdf_search.rs:3:79
+  |
+3 | use objc2::{ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id, sel};
+  |                                                                               ^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0405`.
+warning: `oxireader` (bin "oxireader") generated 34 warnings
+error: could not compile `oxireader` (bin "oxireader") due to 1 previous error; 34 warnings emitted

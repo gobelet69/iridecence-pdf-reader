@@ -1,0 +1,23 @@
+    Checking oxireader v0.1.0 (/Users/theodeville/Documents/OxiReader)
+error: mismatched closing delimiter: `}`
+   --> src/palette.rs:20:14
+    |
+ 20 | define_class!(
+    |              ^ unclosed delimiter
+...
+114 |     }
+    |     ^ mismatched closing delimiter
+
+error: unexpected closing delimiter: `)`
+   --> src/palette.rs:115:1
+    |
+101 |     unsafe impl NSTextFieldDelegate for CommandPaletteDelegate {
+    |                                                                - this delimiter might not be properly closed...
+...
+113 |         }
+    |         - ...as it matches this but it has different indentation
+114 |     }
+115 | );
+    | ^ unexpected closing delimiter
+
+error: could not compile `oxireader` (bin "oxireader") due to 2 previous errors

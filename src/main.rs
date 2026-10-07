@@ -42,6 +42,7 @@ use objc2::{AnyThread, ClassType, DeclaredClass, MainThreadOnly, define_class, m
 mod debug_console;
 mod logger;
 mod workspace;
+mod palette;
 mod workspace_delegate;
 use crate::workspace_delegate::WorkspaceDelegate;
 use objc2_app_kit::{
@@ -85,6 +86,9 @@ struct AppDelegateIvars {
     history: std::cell::RefCell<Vec<(String, usize)>>,
     history_index: std::cell::Cell<usize>,
     ignore_history_update: std::cell::Cell<bool>,
+    
+    palette_panel: std::cell::OnceCell<objc2::rc::Retained<objc2_app_kit::NSPanel>>,
+    palette_delegate: std::cell::OnceCell<objc2::rc::Retained<crate::palette::CommandPaletteDelegate>>,
 }
 
 define_class!(
@@ -342,22 +346,23 @@ define_class!(
                     }
                     if let Some(outline_scroll) = self.ivars().right_sidebar_outline_scroll.get() {
                         let thumb_view = self.ivars().thumb_view.get().unwrap();
+                        let search_container = self.ivars().right_sidebar_search_container.get();
 
                         if index == 0 {
                             unsafe { outline_scroll.setHidden(true) };
-                            if let Some(search_container) = self.ivars().right_sidebar_search_container.get() {
+                            if let Some(search_container) = search_container {
                                 unsafe { search_container.setHidden(true) };
                             }
                             unsafe { thumb_view.setHidden(false) };
                         } else if index == 1 {
                             unsafe { outline_scroll.setHidden(false) };
-                            if let Some(search_container) = self.ivars().right_sidebar_search_container.get() {
+                            if let Some(search_container) = search_container {
                                 unsafe { search_container.setHidden(true) };
                             }
                             unsafe { thumb_view.setHidden(true) };
                         } else {
                             unsafe { outline_scroll.setHidden(true) };
-                            if let Some(search_container) = self.ivars().right_sidebar_search_container.get() {
+                            if let Some(search_container) = search_container {
                                 unsafe { search_container.setHidden(false) };
                             }
                             unsafe { thumb_view.setHidden(true) };
@@ -931,26 +936,14 @@ define_class!(
 
         #[unsafe(method(goToPage:))]
         fn go_to_page(&self, _sender: Option<&AnyObject>) {
-            let mtm = MainThreadMarker::new().unwrap();
-            let alert = objc2_app_kit::NSAlert::new(mtm);
-            unsafe {
-                alert.setMessageText(objc2_foundation::ns_string!("Go to Page"));
-                let text_field = objc2_app_kit::NSTextField::textFieldWithString(objc2_foundation::ns_string!(""), mtm);
-                text_field.setFrame(objc2_foundation::NSRect::new(objc2_foundation::NSPoint::new(0.0, 0.0), objc2_foundation::NSSize::new(200.0, 24.0)));
-                alert.setAccessoryView(Some(&text_field));
-                alert.addButtonWithTitle(objc2_foundation::ns_string!("Go"));
-                alert.addButtonWithTitle(objc2_foundation::ns_string!("Cancel"));
-                let response = alert.runModal();
-                if response == 1000 { // NSAlertFirstButtonReturn
-                    let page_str = text_field.stringValue().to_string();
-                    if let Ok(page_idx) = page_str.parse::<usize>() {
-                        if let Some(pdf_view) = self.ivars().pdf_view.get() {
-                            if let Some(doc) = pdf_view.document() {
-                                let idx = if page_idx > 0 { page_idx - 1 } else { 0 };
-                                if let Some(page) = doc.pageAtIndex(idx) {
-                                    pdf_view.goToPage(&page);
-                                }
-                            }
+            if let Some(panel) = self.ivars().palette_panel.get() {
+                if let Some(del) = self.ivars().palette_delegate.get() {
+                    if let Some(tf) = del.ivars().text_field.get() {
+                        unsafe { tf.setStringValue(&objc2_foundation::NSString::from_str("p:")) };
+                        del.update_search("p:");
+                        unsafe { panel.makeKeyAndOrderFront(None) };
+                        if let Some(window) = self.ivars().window.get() {
+                            unsafe { panel.center() };
                         }
                     }
                 }
@@ -959,71 +952,14 @@ define_class!(
 
         #[unsafe(method(quickOpen:))]
         fn quick_open(&self, _sender: Option<&AnyObject>) {
-            let root = self.ivars().workspace_delegate.get().and_then(|d| d.ivars().root_node.borrow().clone());
-            if let Some(root_node) = root {
-                let path = root_node.ivars().path.borrow().clone();
-                let mut pdfs = Vec::new();
-                let mut dirs = vec![std::path::PathBuf::from(path)];
-                while let Some(d) = dirs.pop() {
-                    if pdfs.len() > 1000 { break; }
-                    if let Ok(entries) = std::fs::read_dir(&d) {
-                        for entry in entries.flatten() {
-                            if let Ok(m) = entry.metadata() {
-                                if m.is_dir() {
-                                    let name = entry.file_name().to_string_lossy().to_string();
-                                    if !name.starts_with('.') && name != "Library" {
-                                        dirs.push(entry.path());
-                                    }
-                                } else if let Some(ext) = entry.path().extension() {
-                                    if ext.to_string_lossy().to_lowercase() == "pdf" {
-                                        pdfs.push(entry.path());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                let mtm = MainThreadMarker::new().unwrap();
-                let alert = objc2_app_kit::NSAlert::new(mtm);
-                unsafe {
-                    alert.setMessageText(objc2_foundation::ns_string!("Quick Open"));
-                    alert.setInformativeText(objc2_foundation::ns_string!("Type or select a PDF to open:"));
-                    
-                    let combo = objc2_app_kit::NSComboBox::initWithFrame(
-                        objc2_app_kit::NSComboBox::alloc(mtm), 
-                        objc2_foundation::NSRect::new(objc2_foundation::NSPoint::new(0.0, 0.0), objc2_foundation::NSSize::new(300.0, 24.0))
-                    );
-                    for p in &pdfs {
-                        let name = p.file_name().unwrap_or_default().to_string_lossy();
-                        combo.addItemWithObjectValue(objc2_foundation::NSString::from_str(&name).as_ref());
-                    }
-                    combo.setCompletes(true);
-                    
-                    alert.setAccessoryView(Some(&combo));
-                    alert.addButtonWithTitle(objc2_foundation::ns_string!("Open"));
-                    alert.addButtonWithTitle(objc2_foundation::ns_string!("Cancel"));
-                    
-                    let window = self.ivars().window.get().unwrap();
-                    
-                    let response = alert.runModal();
-                    if response == 1000 {
-                        let sel_str = combo.stringValue().to_string();
-                        for p in &pdfs {
-                            if p.file_name().unwrap_or_default().to_string_lossy() == sel_str {
-                                let path_str = p.to_string_lossy().to_string();
-                                let url = objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(&path_str));
-                                let doc = objc2_pdf_kit::PDFDocument::initWithURL(objc2_pdf_kit::PDFDocument::alloc(), &url);
-                                if let Some(doc) = doc {
-                                    self.ivars().pdf_view.get().unwrap().setDocument(Some(&doc));
-                                    if let Some(title) = url.lastPathComponent() {
-                                        self.ivars().window.get().unwrap().setTitle(&title);
-                                    }
-                                    self.ivars().window.get().unwrap().setContentViewController(Some(&*self.ivars().split_vc.get().unwrap()));
-                                    crate::add_recent_item(&path_str);
-                                }
-                                break;
-                            }
+            if let Some(panel) = self.ivars().palette_panel.get() {
+                if let Some(del) = self.ivars().palette_delegate.get() {
+                    if let Some(tf) = del.ivars().text_field.get() {
+                        unsafe { tf.setStringValue(&objc2_foundation::NSString::from_str("")) };
+                        del.update_search("");
+                        unsafe { panel.makeKeyAndOrderFront(None) };
+                        if let Some(window) = self.ivars().window.get() {
+                            unsafe { panel.center() };
                         }
                     }
                 }
@@ -1032,41 +968,15 @@ define_class!(
 
         #[unsafe(method(commandPalette:))]
         fn command_palette(&self, _sender: Option<&AnyObject>) {
-            let mtm = MainThreadMarker::new().unwrap();
-            let alert = objc2_app_kit::NSAlert::new(mtm);
-            unsafe {
-                alert.setMessageText(objc2_foundation::ns_string!("Command Palette"));
-                alert.setInformativeText(objc2_foundation::ns_string!("Select an action:"));
-                
-                let combo = objc2_app_kit::NSComboBox::initWithFrame(
-                    objc2_app_kit::NSComboBox::alloc(mtm), 
-                    objc2_foundation::NSRect::new(objc2_foundation::NSPoint::new(0.0, 0.0), objc2_foundation::NSSize::new(300.0, 24.0))
-                );
-                
-                let actions = ["Open PDF", "Quick Open", "Search", "Go to Page", "Debug Console", "Fit Width", "Fit Page", "Actual Size"];
-                
-                for a in &actions {
-                    combo.addItemWithObjectValue(objc2_foundation::NSString::from_str(a).as_ref());
-                }
-                combo.setCompletes(true);
-                
-                alert.setAccessoryView(Some(&combo));
-                alert.addButtonWithTitle(objc2_foundation::ns_string!("Execute"));
-                alert.addButtonWithTitle(objc2_foundation::ns_string!("Cancel"));
-                
-                let response = alert.runModal();
-                if response == 1000 {
-                    let sel_str = combo.stringValue().to_string();
-                    match sel_str.as_str() {
-                        "Open PDF" => { self.open_pdf(objc2::sel!(openPdf:), None); },
-                        "Quick Open" => { self.quick_open(objc2::sel!(quickOpen:), None); },
-                        "Search" => { self.search(objc2::sel!(search:), None); },
-                        "Go to Page" => { self.go_to_page(objc2::sel!(goToPage:), None); },
-                        "Debug Console" => { self.open_debug_console(objc2::sel!(openDebugConsole:), None); },
-                        "Fit Width" => { self.fit_width(objc2::sel!(fitWidth:), None); },
-                        "Fit Page" => { self.fit_page(objc2::sel!(fitPage:), None); },
-                        "Actual Size" => { self.actual_size(objc2::sel!(actualSize:), None); },
-                        _ => {}
+            if let Some(panel) = self.ivars().palette_panel.get() {
+                if let Some(del) = self.ivars().palette_delegate.get() {
+                    if let Some(tf) = del.ivars().text_field.get() {
+                        unsafe { tf.setStringValue(&objc2_foundation::NSString::from_str(">")) };
+                        del.update_search(">");
+                        unsafe { panel.makeKeyAndOrderFront(None) };
+                        if let Some(window) = self.ivars().window.get() {
+                            unsafe { panel.center() };
+                        }
                     }
                 }
             }
@@ -1395,7 +1305,7 @@ define_class!(
             }
 
 
-            // RIGHT SIDEBAR (Outline + Pages)
+            // RIGHT SIDEBAR (Outline + Pages + Search)
             let pdf_outline_del = crate::pdf_outline::PdfOutlineDelegate::new(mtm, pdf_view.clone());
             let right_outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
             let right_col = unsafe { NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), objc2_foundation::ns_string!("OutlineColumn")) };
@@ -1418,8 +1328,67 @@ define_class!(
                 right_outline_scroll.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
                 right_outline_scroll.setHidden(true); // default to Pages
             }
+            
+            // Search UI
+            let pdf_search_del = crate::pdf_search::PdfSearchDelegate::new(mtm, pdf_view.clone());
+            let search_outline_view = unsafe { NSOutlineView::initWithFrame(NSOutlineView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
+            let search_col = unsafe { NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), objc2_foundation::ns_string!("SearchColumn")) };
+            unsafe {
+                search_col.setWidth(230.0);
+                search_outline_view.addTableColumn(&search_col);
+                search_outline_view.setOutlineTableColumn(Some(&search_col));
+                search_outline_view.setHeaderView(None);
+                
+                let s_del_ptr: *const crate::pdf_search::PdfSearchDelegate = &*pdf_search_del;
+                let _: () = msg_send![&search_outline_view, setDelegate: s_del_ptr];
+                let _: () = msg_send![&search_outline_view, setDataSource: s_del_ptr];
+            }
+            pdf_search_del.ivars().outline_view.set(search_outline_view.clone()).unwrap();
+            
+            let search_scroll = unsafe { NSScrollView::initWithFrame(NSScrollView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
+            unsafe {
+                search_scroll.setHasVerticalScroller(true);
+                search_scroll.setDocumentView(Some(&search_outline_view));
+                search_scroll.setDrawsBackground(false);
+                search_scroll.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
+                search_scroll.setHidden(true);
+            }
+            
+            let search_field = unsafe { NSTextField::textFieldWithString(objc2_foundation::ns_string!(""), mtm) };
+            unsafe {
+                let s_del_ptr: *const crate::pdf_search::PdfSearchDelegate = &*pdf_search_del;
+                let _: () = msg_send![&search_field, setDelegate: s_del_ptr];
+                search_field.setPlaceholderString(Some(objc2_foundation::ns_string!("Search...")));
+                search_field.setTranslatesAutoresizingMaskIntoConstraints(false);
+            }
+            
+            let search_container = unsafe { NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
+            unsafe {
+                search_container.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
+                search_container.addSubview(&search_field);
+                search_container.addSubview(&search_scroll);
+                search_scroll.setTranslatesAutoresizingMaskIntoConstraints(false);
+                
+                search_field.topAnchor().constraintEqualToAnchor_constant(&search_container.topAnchor(), 8.0).setActive(true);
+                search_field.leadingAnchor().constraintEqualToAnchor_constant(&search_container.leadingAnchor(), 8.0).setActive(true);
+                search_field.trailingAnchor().constraintEqualToAnchor_constant(&search_container.trailingAnchor(), -8.0).setActive(true);
+                
+                search_scroll.topAnchor().constraintEqualToAnchor_constant(&search_field.bottomAnchor(), 8.0).setActive(true);
+                search_scroll.leadingAnchor().constraintEqualToAnchor(&search_container.leadingAnchor()).setActive(true);
+                search_scroll.trailingAnchor().constraintEqualToAnchor(&search_container.trailingAnchor()).setActive(true);
+                search_scroll.bottomAnchor().constraintEqualToAnchor(&search_container.bottomAnchor()).setActive(true);
+                
+                search_container.setHidden(true);
+            }
 
-            let right_container = unsafe { NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0))) };
+            // Using NSStackView for right_container
+            let right_container = unsafe { NSStackView::stackViewWithViews(&NSArray::from_slice(&[]), mtm) };
+            unsafe {
+                right_container.setOrientation(objc2_app_kit::NSUserInterfaceLayoutOrientation::Vertical);
+                right_container.setSpacing(0.0);
+                right_container.setDistribution(objc2_app_kit::NSStackViewDistribution::Fill);
+                right_container.setAlignment(objc2_app_kit::NSLayoutAttribute::CenterX);
+            }
 
             let segmented = unsafe { NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
                 &NSArray::from_slice(&[objc2_foundation::ns_string!("Pages"), objc2_foundation::ns_string!("Outline"), objc2_foundation::ns_string!("Search")]),
@@ -1436,56 +1405,87 @@ define_class!(
                 if selected_idx == 1 {
                     right_outline_scroll.setHidden(false);
                     thumb_view.setHidden(true);
+                    search_container.setHidden(true);
                 } else if selected_idx == 2 {
                     right_outline_scroll.setHidden(true);
                     thumb_view.setHidden(true);
+                    search_container.setHidden(false);
                 } else {
                     right_outline_scroll.setHidden(true);
                     thumb_view.setHidden(false);
+                    search_container.setHidden(true);
                 }
 
                 let seg_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 41.0)));
-                seg_wrapper.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin);
                 seg_wrapper.addSubview(&segmented);
-
-                // Add 8-10pt top padding, 10-12pt horizontal padding, 8pt bottom padding.
-                // 41pt height - 8pt top - 8pt bottom = 25pt.
-                segmented.setFrame(NSRect::new(NSPoint::new(12.0, 8.0), NSSize::new(230.0 - 24.0, 25.0)));
-                segmented.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
+                seg_wrapper.setTranslatesAutoresizingMaskIntoConstraints(false);
+                
+                segmented.setTranslatesAutoresizingMaskIntoConstraints(false);
+                segmented.topAnchor().constraintEqualToAnchor_constant(&seg_wrapper.topAnchor(), 8.0).setActive(true);
+                segmented.bottomAnchor().constraintEqualToAnchor_constant(&seg_wrapper.bottomAnchor(), -8.0).setActive(true);
+                segmented.leadingAnchor().constraintEqualToAnchor_constant(&seg_wrapper.leadingAnchor(), 12.0).setActive(true);
+                segmented.trailingAnchor().constraintEqualToAnchor_constant(&seg_wrapper.trailingAnchor(), -12.0).setActive(true);
 
                 let separator = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 1.0)));
                 separator.setWantsLayer(true);
                 if let Some(layer) = separator.layer() {
                     let cg = objc2_app_kit::NSColor::separatorColor().CGColor(); let ptr = Retained::as_ptr(&cg); let _: () = msg_send![&layer, setBackgroundColor: ptr];
                 }
-                separator.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin);
+                separator.setTranslatesAutoresizingMaskIntoConstraints(false);
+                separator.heightAnchor().constraintEqualToConstant(1.0).setActive(true);
 
                 let content_wrapper = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 660.0)));
-                content_wrapper.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
                 content_wrapper.addSubview(&thumb_view);
                 content_wrapper.addSubview(&right_outline_scroll);
+                content_wrapper.addSubview(&search_container);
+                
+                thumb_view.setTranslatesAutoresizingMaskIntoConstraints(false);
+                right_outline_scroll.setTranslatesAutoresizingMaskIntoConstraints(false);
+                search_container.setTranslatesAutoresizingMaskIntoConstraints(false);
+                
+                
+                thumb_view.topAnchor().constraintEqualToAnchor(&content_wrapper.topAnchor()).setActive(true);
+                thumb_view.bottomAnchor().constraintEqualToAnchor(&content_wrapper.bottomAnchor()).setActive(true);
+                thumb_view.leadingAnchor().constraintEqualToAnchor(&content_wrapper.leadingAnchor()).setActive(true);
+                thumb_view.trailingAnchor().constraintEqualToAnchor(&content_wrapper.trailingAnchor()).setActive(true);
+                
+                right_outline_scroll.topAnchor().constraintEqualToAnchor(&content_wrapper.topAnchor()).setActive(true);
+                right_outline_scroll.bottomAnchor().constraintEqualToAnchor(&content_wrapper.bottomAnchor()).setActive(true);
+                right_outline_scroll.leadingAnchor().constraintEqualToAnchor(&content_wrapper.leadingAnchor()).setActive(true);
+                right_outline_scroll.trailingAnchor().constraintEqualToAnchor(&content_wrapper.trailingAnchor()).setActive(true);
+                
+                search_container.topAnchor().constraintEqualToAnchor(&content_wrapper.topAnchor()).setActive(true);
+                search_container.bottomAnchor().constraintEqualToAnchor(&content_wrapper.bottomAnchor()).setActive(true);
+                search_container.leadingAnchor().constraintEqualToAnchor(&content_wrapper.leadingAnchor()).setActive(true);
+                search_container.trailingAnchor().constraintEqualToAnchor(&content_wrapper.trailingAnchor()).setActive(true);
+                
 
-                right_container.addSubview(&content_wrapper);
-                right_container.addSubview(&separator);
-                right_container.addSubview(&seg_wrapper);
+                right_container.addView_inGravity(&seg_wrapper, objc2_app_kit::NSStackViewGravity::Top);
+                right_container.addView_inGravity(&separator, objc2_app_kit::NSStackViewGravity::Top);
+                right_container.addView_inGravity(&content_wrapper, objc2_app_kit::NSStackViewGravity::Top);
+                
+                seg_wrapper.widthAnchor().constraintEqualToAnchor(&right_container.widthAnchor()).setActive(true);
+                separator.widthAnchor().constraintEqualToAnchor(&right_container.widthAnchor()).setActive(true);
+                content_wrapper.widthAnchor().constraintEqualToAnchor(&right_container.widthAnchor()).setActive(true);
+            }
+
             unsafe {
                 let nc = objc2_foundation::NSNotificationCenter::defaultCenter();
                 nc.addObserver_selector_name_object(
                     &*(self as *const AppDelegate as *const AnyObject),
                     objc2::sel!(thumbnailFrameChanged:),
                     Some(objc2_app_kit::NSViewFrameDidChangeNotification),
-                    Some(&*content_wrapper as &AnyObject)
+                    Some(&*right_container as &AnyObject) // Observe container instead
                 );
-                content_wrapper.setPostsFrameChangedNotifications(true);
+                right_container.setPostsFrameChangedNotifications(true);
             }
-
-
-                // Layout adjustment
-                seg_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 40.0), NSSize::new(230.0, 41.0)));
-                separator.setFrame(NSRect::new(NSPoint::new(0.0, 700.0 - 41.0), NSSize::new(230.0, 1.0)));
-                content_wrapper.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(230.0, 700.0 - 41.0)));
-            }
-
+            
+            let _ = self.ivars().right_sidebar_search_container.set(search_container);
+            let _ = self.ivars().search_field.set(search_field);
+            let _ = self.ivars().pdf_search_delegate.set(pdf_search_del);
+            let _ = self.ivars().right_sidebar_segmented.set(segmented.clone());
+            
+            
             let navigation_vc = NSViewController::new(mtm);
             unsafe { navigation_vc.setView(&right_container) };
             let navigation_item = unsafe { NSSplitViewItem::inspectorWithViewController(&navigation_vc) };
@@ -1511,6 +1511,11 @@ define_class!(
 
             self.ivars().window.set(window).unwrap();
             self.ivars().pdf_view.set(pdf_view).unwrap();
+            
+            let (palette_panel, palette_delegate) = crate::palette::create_palette(mtm);
+            let _ = self.ivars().palette_panel.set(palette_panel);
+            let _ = self.ivars().palette_delegate.set(palette_delegate);
+
 
             unsafe {
                 let nc = objc2_foundation::NSNotificationCenter::defaultCenter();
