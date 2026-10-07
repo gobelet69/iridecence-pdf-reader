@@ -1,5 +1,5 @@
 use objc2::{msg_send, rc::Retained};
-use objc2_pdf_kit::{PDFOutline, PDFDocument};
+use objc2_pdf_kit::{PDFDocument, PDFOutline};
 
 pub fn check_outline(doc: &PDFDocument) {
     let outline: Option<Retained<PDFOutline>> = unsafe { doc.outlineRoot() };

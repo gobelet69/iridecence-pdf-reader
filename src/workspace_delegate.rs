@@ -1,11 +1,16 @@
-use objc2_app_kit::{NSOutlineView, NSTableColumn, NSTableCellView, NSTextField, NSView, NSControl, NSUserInterfaceItemIdentification, NSResponder};
-use objc2::runtime::AnyObject;
 use crate::workspace::FileNode;
-use std::cell::RefCell;
-use objc2::rc::Weak;
 use objc2::rc::Retained;
-use objc2_foundation::{NSObject, NSObjectProtocol, NSInteger, NSRect, NSPoint, NSSize, MainThreadMarker, NSString};
-use objc2::{define_class, MainThreadOnly, DefinedClass, msg_send};
+use objc2::rc::Weak;
+use objc2::runtime::AnyObject;
+use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send};
+use objc2_app_kit::{
+    NSControl, NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
+    NSUserInterfaceItemIdentification, NSView,
+};
+use objc2_foundation::{
+    MainThreadMarker, NSInteger, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+};
+use std::cell::RefCell;
 
 #[derive(Default)]
 pub struct WorkspaceDelegateIvars {
@@ -40,7 +45,7 @@ define_class!(
                         is_root = true;
                     }
                 }
-                
+
                 if is_root {
                     unsafe { outline_view.reloadItem_reloadChildren(None, true) };
                 } else {
@@ -65,7 +70,7 @@ define_class!(
                 }
             }
         }
-        
+
         let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send_id![&outline_view, target] };
         if let Some(target) = target {
             let _: () = unsafe { objc2::msg_send![&target, workspaceSelectionChanged: &*outline_view] };
@@ -76,7 +81,7 @@ define_class!(
         fn outlineView_numberOfChildrenOfItem(&self, _outline_view: &NSOutlineView, item: Option<&AnyObject>) -> NSInteger {
             let root_borrow = self.ivars().root_node.borrow();
             let Some(root) = root_borrow.as_ref() else { return 0; };
-            
+
             let node: &FileNode = match item {
                 Some(it) => {
                     unsafe { &*(it as *const AnyObject as *const FileNode) }
@@ -85,7 +90,7 @@ define_class!(
                     &**root
                 },
             };
-            
+
             node.load_children();
             if let Some(children) = node.ivars().children.borrow().as_ref() {
                 children.len() as NSInteger
@@ -102,7 +107,7 @@ define_class!(
                 Some(it) => unsafe { &*(it as *const AnyObject as *const FileNode) },
                 None => &**root,
             };
-            
+
             let children = node.ivars().children.borrow();
             let child = &children.as_ref().unwrap()[index as usize];
             let retained = unsafe { Retained::cast_unchecked::<AnyObject>(child.clone()) };
@@ -120,13 +125,13 @@ define_class!(
         fn outlineView_viewForTableColumn_item(&self, outline_view: &NSOutlineView, _table_column: Option<&NSTableColumn>, item: &AnyObject) -> *mut NSView {
             let node: &FileNode = unsafe { &*(item as *const AnyObject as *const FileNode) };
             let mtm = MainThreadMarker::new().unwrap();
-            
+
             let id = objc2_foundation::ns_string!("FileCell");
             let mut view = unsafe { outline_view.makeViewWithIdentifier_owner(id, None) };
             if view.is_none() {
                 let cell = unsafe { NSTableCellView::initWithFrame(NSTableCellView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 24.0))) };
                 unsafe { cell.setIdentifier(Some(id)) };
-                
+
                 let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(2.0, 4.0), NSSize::new(16.0, 16.0))) };
                 let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(156.0, 18.0))) };
                 unsafe {
@@ -134,17 +139,17 @@ define_class!(
                     text_field.setDrawsBackground(false);
                     text_field.setEditable(false);
                     text_field.setSelectable(false);
-                    
+
                     let font = objc2_app_kit::NSFont::systemFontOfSize(13.0);
                     text_field.setFont(Some(&font));
                     text_field.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingMiddle);
                     text_field.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
-                    
+
                     cell.addSubview(&image_view);
                     cell.addSubview(&text_field);
                     cell.setImageView(Some(&image_view));
                     cell.setTextField(Some(&text_field));
-                    
+
                     let cloud_iv = unsafe { objc2_app_kit::NSButton::initWithFrame(objc2_app_kit::NSButton::alloc(mtm), NSRect::new(NSPoint::new(180.0, 4.0), NSSize::new(16.0, 16.0))) };
                     unsafe {
                         cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon")));
@@ -154,31 +159,31 @@ define_class!(
                         cloud_iv.setBordered(false);
                         cloud_iv.setTitle(objc2_foundation::ns_string!(""));
                         cloud_iv.setImagePosition(objc2_app_kit::NSCellImagePosition::ImageOnly);
-                        
+
                         let target: &objc2::runtime::AnyObject = &*(self as *const WorkspaceDelegate as *const objc2::runtime::AnyObject);
                         cloud_iv.setTarget(Some(target));
                         cloud_iv.setAction(Some(objc2::sel!(downloadItem:)));
                     }
-                    
+
                     let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(180.0, 4.0), NSSize::new(16.0, 16.0)));
                     unsafe { progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress"))) };
                     progress.setHidden(true);
                     progress.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin);
                     progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
                     progress.setControlSize(objc2_app_kit::NSControlSize::Small);
-                    
+
                     cell.addSubview(&cloud_iv);
                     cell.addSubview(&progress);
                 }
                 view = Some(unsafe { Retained::cast_unchecked::<NSView>(cell) });
             }
-            
+
             let cell = view.unwrap();
             let table_cell = unsafe { Retained::cast_unchecked::<NSTableCellView>(cell.clone()) };
-            
+
             let is_dir = node.ivars().is_dir.get();
             let symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
-            
+
             if let Some(iv) = unsafe { table_cell.imageView() } {
                 if node.ivars().is_loading_placeholder.get() {
                     unsafe { iv.setImage(None) }; // No icon for loading placeholder
@@ -194,15 +199,15 @@ define_class!(
                     }
                 }
             }
-            
+
             let icloud_status = node.ivars().icloud_status.get();
             let download_progress = node.ivars().download_progress.get();
-            
+
             unsafe {
                 let subviews = table_cell.subviews();
                 let mut cloud_iv: Option<Retained<objc2_app_kit::NSImageView>> = None;
                 let mut progress: Option<Retained<objc2_app_kit::NSProgressIndicator>> = None;
-                
+
                 for i in 0..subviews.count() {
                     let v = subviews.objectAtIndex(i);
                     if let Some(ident) = v.identifier() {
@@ -213,8 +218,8 @@ define_class!(
                         }
                     }
                 }
-                
-                
+
+
                 let diag_state = if icloud_status == 0 { "Local" } else if icloud_status == 1 { "CloudOnly" } else if icloud_status == 2 { "Downloading" } else if icloud_status == 4 { "Failed" } else { "Unknown" };
                 let diag_icon = if icloud_status == 0 { "NONE" } else if icloud_status == 1 { "Cloud" } else if icloud_status == 2 { "Spinner" } else if icloud_status == 4 { "Failed" } else { "NONE" };
                 if icloud_status == 0 {
@@ -224,7 +229,7 @@ define_class!(
                 if let Some(civ) = cloud_iv {
                     if icloud_status == 1 || icloud_status == 4 {
                         civ.setHidden(false);
-                        
+
                         if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(if icloud_status == 1 { objc2_foundation::ns_string!("icloud.and.arrow.down") } else { objc2_foundation::ns_string!("exclamationmark.icloud") }, None) {
                             civ.setImage(Some(&img));
                             if icloud_status == 1 {
@@ -237,7 +242,7 @@ define_class!(
                         civ.setHidden(true);
                     }
                 }
-                
+
                 if let Some(pi) = progress {
                     if icloud_status == 2 {
                         pi.setHidden(false);
@@ -254,7 +259,7 @@ define_class!(
                     }
                 }
             }
-            
+
             if let Some(tf) = unsafe { table_cell.textField() } {
                 let name_str = &node.ivars().name.borrow();
                 let path_str = &node.ivars().path.borrow();
@@ -267,22 +272,24 @@ define_class!(
 );
 
 impl WorkspaceDelegate {
-
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
         let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
-        
+
         let ws = unsafe { objc2_app_kit::NSWorkspace::sharedWorkspace() };
-        let folder_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
+        let folder_img =
+            unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
         let doc_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("pdf")) };
-        
+
         *this.ivars().folder_image.borrow_mut() = Some(folder_img);
         *this.ivars().doc_image.borrow_mut() = Some(doc_img);
         this
     }
 
-
-    pub fn find_node_by_path(&self, target_path: &str) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
+    pub fn find_node_by_path(
+        &self,
+        target_path: &str,
+    ) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
         let root_borrow = self.ivars().root_node.borrow();
         if let Some(root) = root_borrow.as_ref() {
             return Self::search_node(root, target_path);
@@ -290,9 +297,14 @@ impl WorkspaceDelegate {
         None
     }
 
-    fn search_node(node: &crate::workspace::FileNode, target_path: &str) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
+    fn search_node(
+        node: &crate::workspace::FileNode,
+        target_path: &str,
+    ) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
         if node.ivars().path.borrow().as_str() == target_path {
-            return Some(unsafe { objc2::rc::Retained::retain(node as *const _ as *mut _) }.unwrap());
+            return Some(
+                unsafe { objc2::rc::Retained::retain(node as *const _ as *mut _) }.unwrap(),
+            );
         }
         if let Some(children) = node.ivars().children.borrow().as_ref() {
             for child in children {
@@ -309,8 +321,12 @@ impl WorkspaceDelegate {
         unsafe {
             let nc = objc2_foundation::NSNotificationCenter::defaultCenter();
             let name = objc2_foundation::ns_string!("FileNodeDidLoadChildren");
-            nc.addObserver_selector_name_object(self, objc2::sel!(nodeDidLoadChildren:), Some(name), None);
+            nc.addObserver_selector_name_object(
+                self,
+                objc2::sel!(nodeDidLoadChildren:),
+                Some(name),
+                None,
+            );
         }
     }
-
 }

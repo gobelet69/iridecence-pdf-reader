@@ -1,6 +1,6 @@
-use std::sync::Mutex;
-use once_cell::sync::Lazy;
 use objc2_foundation::NSString;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 
 #[derive(Clone, Debug)]
 pub struct LogMessage {
@@ -20,24 +20,27 @@ pub fn log_event(category: &str, event: &str) {
         let name = std::thread::current().name().unwrap_or("BG").to_string();
         name
     };
-    
+
     use chrono::Local;
     let ts = Local::now().format("%H:%M:%S.%3f").to_string();
-    
+
     let msg = LogMessage {
         timestamp: ts.clone(),
         thread_name: thread_str.clone(),
         category: category.to_string(),
         event: event.to_string(),
     };
-    
-    let line = format!("[{}] [{}] [{}] {}", msg.timestamp, msg.thread_name, msg.category, msg.event);
+
+    let line = format!(
+        "[{}] [{}] [{}] {}",
+        msg.timestamp, msg.thread_name, msg.category, msg.event
+    );
     println!("{}", line);
-    
+
     if let Ok(mut buffer) = LOG_BUFFER.lock() {
         buffer.push(msg);
     }
-    
+
     // Try to update console if open
     unsafe {
         if let Ok(guard) = crate::debug_console::DEBUG_WINDOW_CONTROLLER.lock() {

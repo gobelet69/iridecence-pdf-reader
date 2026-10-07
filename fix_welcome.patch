@@ -1,0 +1,38 @@
+--- src/main.rs
++++ src/main.rs
+@@ -1542,6 +1542,7 @@
+             } else {
+                 let welcome_vc = NSViewController::new(mtm);
+                 let welcome_view = unsafe { NSView::initWithFrame(NSView::alloc(mtm), rect) };
+ 
+                 let target: &objc2::runtime::AnyObject = unsafe { &*(self as *const AppDelegate as *const AnyObject) };
+                 let open_pdf_btn = unsafe { NSButton::buttonWithTitle_target_action(objc2_foundation::ns_string!("Open PDF..."), Some(target), Some(objc2::sel!(openPdf:)), mtm) };
+                 let open_folder_btn = unsafe { NSButton::buttonWithTitle_target_action(objc2_foundation::ns_string!("Open Folder..."), Some(target), Some(objc2::sel!(openFolder:)), mtm) };
+ 
+                 unsafe {
+                     open_pdf_btn.setBezelStyle(objc2_app_kit::NSBezelStyle::Push);
+                     open_folder_btn.setBezelStyle(objc2_app_kit::NSBezelStyle::Push);
+ 
+                     let stack = NSStackView::stackViewWithViews(&NSArray::from_slice(&[open_pdf_btn.as_ref(), open_folder_btn.as_ref()]), mtm);
+                     stack.setOrientation(objc2_app_kit::NSUserInterfaceLayoutOrientation::Vertical);
+                     stack.setSpacing(20.0);
+ 
+                     let stack_rect = NSRect::new(NSPoint::new(1000.0/2.0 - 100.0, 700.0/2.0 - 50.0), NSSize::new(200.0, 100.0));
+                     stack.setFrame(stack_rect);
+                     stack.setAutoresizingMask(
+                         objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin |
+                         objc2_app_kit::NSAutoresizingMaskOptions::ViewMaxXMargin |
+                         objc2_app_kit::NSAutoresizingMaskOptions::ViewMinYMargin |
+                         objc2_app_kit::NSAutoresizingMaskOptions::ViewMaxYMargin
+                     );
+ 
+                     welcome_view.addSubview(&stack);
++
++                    let fav_label = NSTextField::labelWithString(objc2_foundation::ns_string!("Favorites"), mtm);
++                    fav_label.setFrame(NSRect::new(NSPoint::new(50.0, 600.0), NSSize::new(200.0, 30.0)));
++                    welcome_view.addSubview(&fav_label);
++
+                     welcome_vc.setView(&welcome_view);
+                 }
+ 
+                 self.ivars().window.get().unwrap().setContentViewController(Some(&welcome_vc));
