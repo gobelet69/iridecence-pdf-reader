@@ -2974,12 +2974,12 @@ impl AppDelegate {
     pub fn open_file_url(&self, url: &NSURL) {
         if let Some(path) = unsafe { url.path() } {
             let path_str = path.to_string();
-            if let Some(existing_idx) = self
+            let existing_idx = self
                 .ivars()
                 .tab_manager
                 .borrow()
-                .find_tab_by_path(&path_str)
-            {
+                .find_tab_by_path(&path_str);
+            if let Some(existing_idx) = existing_idx {
                 self.switch_to_tab_index(existing_idx);
                 return;
             }
