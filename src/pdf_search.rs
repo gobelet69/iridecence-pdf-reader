@@ -1,6 +1,6 @@
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id, sel};
+use objc2::{DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id};
 use objc2_app_kit::*;
 use objc2_foundation::*;
 use objc2_pdf_kit::{PDFDocumentDelegate, PDFSelection, PDFView};
@@ -12,6 +12,7 @@ pub struct PdfSearchDelegateIvars {
     pub outline_view: std::cell::OnceCell<Retained<NSOutlineView>>,
     pub results: RefCell<Vec<Retained<PDFSelection>>>,
     pub is_searching: std::cell::Cell<bool>,
+    pub search_field: std::cell::OnceCell<Retained<NSTextField>>,
 }
 
 define_class!(
@@ -22,7 +23,75 @@ define_class!(
     pub struct PdfSearchDelegate;
 
     unsafe impl NSObjectProtocol for PdfSearchDelegate {}
-    unsafe impl NSControlTextEditingDelegate for PdfSearchDelegate {}
+    unsafe impl NSControlTextEditingDelegate for PdfSearchDelegate {
+        #[unsafe(method(controlTextDidChange:))]
+        fn controlTextDidChange(&self, _notification: &NSNotification) {
+            if let Some(tf) = self.ivars().search_field.get() {
+                let query = unsafe { tf.stringValue() };
+                if query.length() > 0 {
+                    self.start_search(&query);
+                } else {
+                    self.cancel_search();
+                    self.ivars().results.borrow_mut().clear();
+                    if let Some(outline_view) = self.ivars().outline_view.get() {
+                        unsafe { outline_view.reloadData() };
+                    }
+                }
+            }
+        }
+
+        #[unsafe(method(control:textView:doCommandBySelector:))]
+        fn control_textView_doCommandBySelector(
+            &self,
+            _control: &NSControl,
+            _text_view: &NSTextView,
+            command_selector: objc2::runtime::Sel,
+        ) -> objc2::runtime::Bool {
+            let sel_name = command_selector.name();
+            if sel_name.to_bytes() == b"cancelOperation:" {
+                if let Some(tf) = self.ivars().search_field.get() {
+                    unsafe { tf.setStringValue(&NSString::from_str("")) };
+                }
+                self.cancel_search();
+                self.ivars().results.borrow_mut().clear();
+                if let Some(outline_view) = self.ivars().outline_view.get() {
+                    unsafe { outline_view.reloadData() };
+                }
+
+                if let Some(app) = unsafe {
+                    NSApplication::sharedApplication(MainThreadMarker::new().unwrap()).delegate()
+                } {
+                    let _: () = unsafe { msg_send![&app, recordHistory] };
+                }
+                if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                    if let Some(window) = unsafe { pdf_view.window() } {
+                        unsafe { window.makeFirstResponder(Some(pdf_view.as_ref())) };
+                    }
+                }
+                return true.into();
+            } else if sel_name.to_bytes() == b"insertNewline:" {
+                if let Some(outline_view) = self.ivars().outline_view.get() {
+                    let results = self.ivars().results.borrow();
+                    if !results.is_empty() {
+                        let mut current_row = unsafe { outline_view.selectedRow() };
+                        if current_row < 0 || current_row >= (results.len() as isize - 1) {
+                            current_row = 0;
+                        } else {
+                            current_row += 1;
+                        }
+                        let index_set =
+                            unsafe { NSIndexSet::indexSetWithIndex(current_row as usize) };
+                        unsafe {
+                            outline_view.selectRowIndexes_byExtendingSelection(&index_set, false)
+                        };
+                        unsafe { outline_view.scrollRowToVisible(current_row) };
+                    }
+                }
+                return true.into();
+            }
+            false.into()
+        }
+    }
 
     unsafe impl PDFDocumentDelegate for PdfSearchDelegate {
         #[unsafe(method(didMatchString:))]
@@ -174,6 +243,13 @@ define_class!(
                         if let Some(item) = unsafe { outline_view.itemAtRow(row) } {
                             let selection: &PDFSelection =
                                 unsafe { &*(&*item as *const AnyObject as *const PDFSelection) };
+
+                            if let Some(app) = unsafe {
+                                NSApplication::sharedApplication(MainThreadMarker::new().unwrap())
+                                    .delegate()
+                            } {
+                                let _: () = unsafe { msg_send![&app, recordHistory] };
+                            }
                             if let Some(pdf_view) = self.ivars().pdf_view.get() {
                                 unsafe {
                                     pdf_view.setCurrentSelection(Some(selection));
@@ -197,6 +273,11 @@ impl PdfSearchDelegate {
     }
 
     pub fn start_search(&self, query: &NSString) {
+        if let Some(app) =
+            unsafe { NSApplication::sharedApplication(MainThreadMarker::new().unwrap()).delegate() }
+        {
+            let _: () = unsafe { msg_send![&app, recordHistory] };
+        }
         if let Some(pdf_view) = self.ivars().pdf_view.get() {
             if let Some(doc) = unsafe { pdf_view.document() } {
                 unsafe {
@@ -214,6 +295,11 @@ impl PdfSearchDelegate {
     }
 
     pub fn cancel_search(&self) {
+        if let Some(app) =
+            unsafe { NSApplication::sharedApplication(MainThreadMarker::new().unwrap()).delegate() }
+        {
+            let _: () = unsafe { msg_send![&app, recordHistory] };
+        }
         if let Some(pdf_view) = self.ivars().pdf_view.get() {
             if let Some(doc) = unsafe { pdf_view.document() } {
                 unsafe {
@@ -221,6 +307,51 @@ impl PdfSearchDelegate {
                         doc.cancelFindString();
                     }
                 }
+            }
+        }
+    }
+
+    pub fn clear(&self) {
+        self.cancel_search();
+        self.ivars().results.borrow_mut().clear();
+        if let Some(tf) = self.ivars().search_field.get() {
+            unsafe { tf.setStringValue(&NSString::from_str("")) };
+        }
+        if let Some(outline_view) = self.ivars().outline_view.get() {
+            unsafe { outline_view.reloadData() };
+        }
+    }
+
+    pub fn find_next(&self) {
+        if let Some(outline_view) = self.ivars().outline_view.get() {
+            let results = self.ivars().results.borrow();
+            if !results.is_empty() {
+                let mut current_row = unsafe { outline_view.selectedRow() };
+                if current_row < 0 || current_row >= (results.len() as isize - 1) {
+                    current_row = 0;
+                } else {
+                    current_row += 1;
+                }
+                let index_set = unsafe { NSIndexSet::indexSetWithIndex(current_row as usize) };
+                unsafe { outline_view.selectRowIndexes_byExtendingSelection(&index_set, false) };
+                unsafe { outline_view.scrollRowToVisible(current_row) };
+            }
+        }
+    }
+
+    pub fn find_previous(&self) {
+        if let Some(outline_view) = self.ivars().outline_view.get() {
+            let results = self.ivars().results.borrow();
+            if !results.is_empty() {
+                let mut current_row = unsafe { outline_view.selectedRow() };
+                if current_row <= 0 {
+                    current_row = results.len() as isize - 1;
+                } else {
+                    current_row -= 1;
+                }
+                let index_set = unsafe { NSIndexSet::indexSetWithIndex(current_row as usize) };
+                unsafe { outline_view.selectRowIndexes_byExtendingSelection(&index_set, false) };
+                unsafe { outline_view.scrollRowToVisible(current_row) };
             }
         }
     }

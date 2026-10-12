@@ -1,45 +1,47 @@
-# OxiReader Roadmap
+# Iridecence PDF Reader Roadmap
 
-## Phase 1 — Research and architecture (Completed)
+## Phase 1 — Research and Architecture (Completed)
 - [x] Inspect the development environment.
-- [x] Select the technical stack (AppKit + PDFKit).
-- [x] Create a development roadmap.
+- [x] Select the technical stack (AppKit + PDFKit via Rust `objc2`).
+- [x] Create initial architecture specification and development roadmap.
 
-## Phase 2 — Working application (Completed)
-- [x] Initialize the Rust project.
-- [x] Create the macOS application window.
-- [x] Implement native file opening.
-- [x] Integrate PDF rendering.
-- [x] Display a PDF document.
+## Phase 2 — Working Application Core (Completed)
+- [x] Initialize pure Rust project (`objc2`, `objc2-app-kit`, `objc2-pdf-kit`).
+- [x] Create macOS native application window with unified titlebar.
+- [x] Implement native file opening and document lifecycle.
+- [x] Integrate PDFKit rendering with continuous and single-page viewing modes.
+- [x] Smooth zooming, fit presets, and page navigation.
 
-## Phase 3 — Usability / P0 Liquid Glass (In Progress)
-- [x] Reliable PDF opening.
-- [x] Responsive PDF rendering and scrolling.
-- [x] Continuous and single-page viewing modes.
-- [x] Smooth zooming and page navigation.
-- [x] Functional native Liquid Glass toolbar and split view.
-- [x] Collapsible document sidebar.
-- [ ] Proper application menus.
-- [ ] Finder integration (`application:openURLs:`).
-- [ ] Robust error handling.
+## Phase 3 — Usability & Liquid Glass Foundation (Completed)
+- [x] Responsive PDF rendering and asynchronous page streaming.
+- [x] Functional native Liquid Glass materials (`NSVisualEffectView` materials and vibrant dividers).
+- [x] Collapsible workspace and document sidebars.
+- [x] Full macOS native application menus and keybindings.
+- [x] Finder integration (`application:openURLs:` & drag-and-drop file opening).
+- [x] Robust error handling, non-blocking asynchronous iCloud Drive faulting and downloads.
+- [x] Responsive default window geometry (centered 960x640pt clamped to screen).
 
-## Phase 4 — Productivity / P1
-- [ ] Page thumbnails (Integrated into sidebar).
-- [ ] Interactive document outlines.
-- [ ] Full-text search with highlighted results.
-- [ ] Text selection and copying.
-- [ ] Text highlighting with PDF persistence.
-- [ ] Native document tabs.
-- [ ] Session restoration & recently opened documents.
+## Phase 4 — Productivity & Navigation (Completed)
+- [x] Multi-tab document management with isolated per-tab sessions and dirty-state tracking.
+- [x] Document sidebar with Pages thumbnail grid, hierarchical Outline tree, and Full-Text Search.
+- [x] Command Palette & Quick Open (`Cmd+P`, `>`, `/`, `:`) with instant fuzzy filtering.
+- [x] Back & Forward navigation history (`Cmd+[` / `Cmd+]`).
+- [x] Reading position persistence (page index, scroll offset, zoom factor per canonical path).
+- [x] Home screen dashboard: Continue Reading, Recents, and Pinned Favorites.
+- [x] Text selection, Copy with Page Reference, and Markdown Quote copying.
 
-## Phase 5 — Advanced reading tools / P2
-- [ ] Annotations and comments.
-- [ ] Underlining, strikethrough, and freehand drawing.
-- [ ] Personal bookmarks.
-- [ ] Reading mode.
-- [ ] Local OCR using Apple Vision.
+## Phase 5 — Annotations, OCR & Preferences (Completed)
+- [x] PDFKit-native annotations (Highlight, Underline, Strikethrough, Text Notes).
+- [x] Document dirty tracking and atomic Save (`Cmd+S`) / Save As (`Cmd+Shift+S`).
+- [x] Local on-device OCR using Apple Vision framework (`VNRecognizeTextRequest`) with page overlay.
+- [x] Dedicated native Settings window (`Cmd+,`) for appearance, rendering, and defaults.
+- [x] Focus Mode (`Cmd+Shift+F`) and Presentation Mode (`Cmd+Option+P`).
+- [x] Automated visual QA regression suite and performance audit harnesses.
 
-## Phase 6 — Document utilities / P3
-- [ ] Merge and split PDFs.
-- [ ] Extract, delete, and rotate pages.
-- [ ] Advanced document search and local indexing.
+## Phase 6 — Advanced Document Utilities & Cloud Sync (Future)
+- [x] Workspace indexing and rapid multi-file search.
+- [ ] Merge and split PDF documents.
+- [ ] Extract, reorder, delete, and rotate pages.
+- [ ] Custom highlight color palettes and annotation export (JSON / Markdown).
+- [ ] CloudKit sync for reading position and annotations across macOS devices.
+

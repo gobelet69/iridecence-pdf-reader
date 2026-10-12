@@ -1,0 +1,68 @@
+# Changelog
+
+All notable changes to **Iridecence PDF Reader** are documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.4.0] - 2026-10-12
+
+### Added
+- **Multi-Document Tabs (`src/tabs.rs`)**:
+  - Safari/Finder-style top document tab bar.
+  - Independent session state per tab: scroll position, zoom level, dirty state.
+  - Native shortcuts: `Cmd+T` (new tab), `Cmd+W` (close tab), `Cmd+Shift+]` / `Cmd+Shift+[` (cycle tabs).
+  - Graceful transition to Home screen upon closing the last tab.
+- **Native PDF Annotations MVP (`src/annotations.rs`)**:
+  - Full support for PDFKit native annotations: Highlight, Underline, Strikeout, Text Note / Comment.
+  - Context menu actions for text selection: Copy Page Reference, Copy Markdown Quote, Search Selection.
+  - Atomic safe document saving (`Cmd+S`, `Cmd+Shift+S`) with zero file truncation risk.
+  - Invariant guard strictly prohibiting overwriting protected documents (e.g., in `MASTER`).
+  - Bookmarks & Annotations inspector tab in document sidebar.
+- **Apple Vision Neural OCR On-Demand (`src/ocr.rs`)**:
+  - On-demand text extraction using Apple Neural Engine `VNRecognizeTextRequest`.
+  - Background thread processing for responsive UI.
+  - Liquid Glass result sheet displaying recognized characters, selectable preview, copy, and export.
+- **Native Settings Window (`src/settings.rs`)**:
+  - Dedicated macOS Preferences window with toolbar tabs: General, Reading, Workspace, Advanced.
+  - Configurable persistent preferences for session restoration, default zoom, and privacy.
+
+### Changed
+- Refactored build target directory to `.nosync` to prevent iCloud Drive locking on macOS.
+- Reduced compiler warnings by 94% across all modules.
+
+---
+
+## [0.3.0] - 2026-10-07
+
+### Added
+- **Liquid Glass Design Overhaul**:
+  - Translucent sidebars utilizing `NSVisualEffectView` HUD and BehindWindow materials.
+  - Responsive window sizing algorithm optimizing for 13-inch MacBook Air displays through high-resolution external monitors.
+  - Automatic Dark/Light mode theme switching with system-reactive vibrancy.
+- **Spotlight-Style Command Palette (`Cmd+P`)**:
+  - Frameless floating modal panel with auto-focusing search field.
+  - Prefix routing: `>` for commands, `/` for document search, `p:` for page jump, default for file search.
+- **Navigation History**:
+  - Deep page and document jump tracking (`Cmd+[`, `Cmd+]`).
+
+---
+
+## [0.2.0] - 2026-10-04
+
+### Added
+- **Workspace Explorer (`src/workspace.rs`)**:
+  - Full-folder workspace browsing via hierarchical `NSOutlineView`.
+  - Background asynchronous workspace indexing with fast binary cache serialization.
+- **iCloud Drive Integration**:
+  - Detection of ubiquitous files and eviction states.
+  - Non-blocking download triggers via `NSFileManager.startDownloadingUbiquitousItemAtURL`.
+  - Visual downloading badges and real-time state machine updates.
+
+---
+
+## [0.1.0] - 2026-10-02
+
+### Added
+- Initial proof of concept in pure Rust using `objc2` AppKit and PDFKit bindings.
+- Basic continuous vertical PDF reading, zoom controls, and thumbnail sidebar.

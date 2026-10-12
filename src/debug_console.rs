@@ -1,14 +1,11 @@
 use objc2::rc::Retained;
-use objc2::{
-    ClassType, DeclaredClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
-    runtime::AnyObject, sel,
-};
+use objc2::{DeclaredClass, MainThreadOnly, define_class, runtime::AnyObject, sel};
 use objc2_app_kit::{
-    NSBackingStoreType, NSBezelStyle, NSButton, NSColor, NSFont, NSScrollView, NSStackView,
-    NSTextView, NSUserInterfaceLayoutOrientation, NSVisualEffectBlendingMode,
-    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowStyleMask,
+    NSBackingStoreType, NSBezelStyle, NSButton, NSColor, NSFont, NSScrollView, NSTextView, NSView,
+    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
+    NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSThread};
+use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
@@ -86,23 +83,35 @@ define_class!(
 );
 
 pub fn show_debug_console() {
-    unsafe {
-        let mut guard = DEBUG_WINDOW_CONTROLLER.lock().unwrap();
-        if guard.is_none() {
-            let vc = DebugConsoleController::new(objc2::MainThreadMarker::new().unwrap());
-            *guard = Some(Retained::into_raw(vc) as usize);
-        }
-
-        if let Some(ptr) = *guard {
-            let vc = ptr as *mut AnyObject;
-            let window = {
-                let vc_retained: &DebugConsoleController = unsafe { &*(vc as *const _) };
-                vc_retained.ivars().window.get().unwrap()
-            };
-            let _: () =
-                objc2::msg_send![&**window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()];
-        }
+    let mtm = objc2::MainThreadMarker::new().unwrap();
+    let mut guard = DEBUG_WINDOW_CONTROLLER.lock().unwrap();
+    if guard.is_none() {
+        let vc = DebugConsoleController::new(mtm);
+        *guard = Some(Retained::into_raw(vc) as usize);
     }
+
+    if let Some(ptr) = *guard {
+        let vc = ptr as *mut AnyObject;
+        let window = {
+            let vc_retained: &DebugConsoleController = unsafe { &*(vc as *const _) };
+            vc_retained.ivars().window.get().unwrap()
+        };
+        crate::window_geometry::WindowGeometry::sanitize_window(
+            &window,
+            crate::window_geometry::WindowKind::DebugConsole,
+            mtm,
+        );
+        let _: () = unsafe {
+            objc2::msg_send![&**window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()]
+        };
+    }
+}
+
+pub fn get_debug_window() -> Option<Retained<NSWindow>> {
+    let guard = DEBUG_WINDOW_CONTROLLER.lock().ok()?;
+    let ptr = (*guard)?;
+    let vc_retained: &DebugConsoleController = unsafe { &*(ptr as *const _) };
+    vc_retained.ivars().window.get().cloned()
 }
 
 impl DebugConsoleController {
@@ -110,7 +119,7 @@ impl DebugConsoleController {
         let text_view = unsafe {
             NSTextView::initWithFrame(
                 NSTextView::alloc(mtm),
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 560.0)),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(720.0, 480.0)),
             )
         };
         let this = Self::alloc(mtm).set_ivars(DebugConsoleIvars {
@@ -121,76 +130,104 @@ impl DebugConsoleController {
         });
         let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
 
-        let rect = NSRect::new(NSPoint::new(100.0, 100.0), NSSize::new(800.0, 600.0));
+        let vis = crate::window_geometry::WindowGeometry::screen_visible_frame(None, mtm);
+        let rect = crate::window_geometry::WindowGeometry::default_frame(
+            vis,
+            crate::window_geometry::WindowKind::DebugConsole,
+        );
         let window = unsafe {
             NSWindow::initWithContentRect_styleMask_backing_defer(
                 NSWindow::alloc(mtm),
                 rect,
                 NSWindowStyleMask::Titled
                     | NSWindowStyleMask::Closable
-                    | NSWindowStyleMask::Resizable,
+                    | NSWindowStyleMask::Resizable
+                    | NSWindowStyleMask::FullSizeContentView,
                 NSBackingStoreType::Buffered,
                 false,
             )
         };
-        unsafe { window.setTitle(&NSString::from_str("Live Debug Console")) };
-        unsafe { window.setReleasedWhenClosed(false) };
-
-        let stack = unsafe { NSStackView::initWithFrame(NSStackView::alloc(mtm), rect) };
-        unsafe { stack.setOrientation(NSUserInterfaceLayoutOrientation::Vertical) };
-        unsafe { stack.setSpacing(0.0) };
+        unsafe {
+            window.setTitle(&NSString::from_str("Live Debug Console"));
+            window.setTitlebarAppearsTransparent(true);
+            window.setReleasedWhenClosed(false);
+        };
+        crate::window_geometry::WindowGeometry::sanitize_window(
+            &window,
+            crate::window_geometry::WindowKind::DebugConsole,
+            mtm,
+        );
 
         let toolbar = unsafe {
-            NSStackView::initWithFrame(
-                NSStackView::alloc(mtm),
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 40.0)),
+            NSView::initWithFrame(
+                NSView::alloc(mtm),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 36.0)),
             )
-        };
-        unsafe { toolbar.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal) };
-        unsafe { toolbar.setSpacing(10.0) };
-        unsafe {
-            toolbar.setEdgeInsets(objc2_foundation::NSEdgeInsets {
-                top: 10.0,
-                left: 10.0,
-                bottom: 10.0,
-                right: 10.0,
-            })
         };
 
         let btn_clear = unsafe {
-            NSButton::buttonWithTitle_target_action(
+            let btn = NSButton::buttonWithTitle_target_action(
                 &NSString::from_str("Clear"),
                 Some(&*this),
                 Some(sel!(clearLogs:)),
                 mtm,
-            )
+            );
+            btn.setBezelStyle(NSBezelStyle::Rounded);
+            btn
         };
         let btn_pause = unsafe {
-            NSButton::buttonWithTitle_target_action(
+            let btn = NSButton::buttonWithTitle_target_action(
                 &NSString::from_str("Pause"),
                 Some(&*this),
                 Some(sel!(togglePause:)),
                 mtm,
-            )
+            );
+            btn.setBezelStyle(NSBezelStyle::Rounded);
+            btn
         };
         let btn_autoscroll = unsafe {
-            NSButton::buttonWithTitle_target_action(
+            let btn = NSButton::buttonWithTitle_target_action(
                 &NSString::from_str("Auto-scroll"),
                 Some(&*this),
                 Some(sel!(toggleAutoScroll:)),
                 mtm,
-            )
+            );
+            btn.setBezelStyle(NSBezelStyle::Rounded);
+            btn
         };
-        unsafe { btn_autoscroll.setState(1) };
+        unsafe {
+            btn_autoscroll.setState(1);
+            btn_clear.setTranslatesAutoresizingMaskIntoConstraints(false);
+            btn_pause.setTranslatesAutoresizingMaskIntoConstraints(false);
+            btn_autoscroll.setTranslatesAutoresizingMaskIntoConstraints(false);
 
-        unsafe {
-            toolbar.addView_inGravity(&btn_clear, objc2_app_kit::NSStackViewGravity::Leading)
-        };
-        unsafe {
-            toolbar.addView_inGravity(&btn_pause, objc2_app_kit::NSStackViewGravity::Leading)
-        };
-        unsafe {
-            toolbar.addView_inGravity(&btn_autoscroll, objc2_app_kit::NSStackViewGravity::Leading)
+            toolbar.addSubview(&btn_clear);
+            toolbar.addSubview(&btn_pause);
+            toolbar.addSubview(&btn_autoscroll);
+
+            objc2_app_kit::NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
+                &*btn_clear
+                    .leadingAnchor()
+                    .constraintEqualToAnchor_constant(&toolbar.leadingAnchor(), 14.0),
+                &*btn_clear
+                    .centerYAnchor()
+                    .constraintEqualToAnchor(&toolbar.centerYAnchor()),
+                &*btn_clear.widthAnchor().constraintEqualToConstant(70.0),
+                &*btn_pause
+                    .leadingAnchor()
+                    .constraintEqualToAnchor_constant(&btn_clear.trailingAnchor(), 8.0),
+                &*btn_pause
+                    .centerYAnchor()
+                    .constraintEqualToAnchor(&toolbar.centerYAnchor()),
+                &*btn_pause.widthAnchor().constraintEqualToConstant(70.0),
+                &*btn_autoscroll
+                    .leadingAnchor()
+                    .constraintEqualToAnchor_constant(&btn_pause.trailingAnchor(), 8.0),
+                &*btn_autoscroll
+                    .centerYAnchor()
+                    .constraintEqualToAnchor(&toolbar.centerYAnchor()),
+                &*btn_autoscroll.widthAnchor().constraintEqualToConstant(96.0),
+            ]));
         };
 
         let scroll = unsafe {
@@ -201,34 +238,107 @@ impl DebugConsoleController {
         };
         unsafe { scroll.setHasVerticalScroller(true) };
         unsafe { scroll.setAutohidesScrollers(true) };
+        unsafe { scroll.setDrawsBackground(false) };
 
-        unsafe { this.ivars().text_view.setEditable(false) };
-        unsafe { this.ivars().text_view.setSelectable(true) };
-        unsafe { this.ivars().text_view.setRichText(false) };
         unsafe {
+            this.ivars().text_view.setEditable(false);
+            this.ivars().text_view.setSelectable(true);
+            this.ivars().text_view.setRichText(false);
+            this.ivars().text_view.setDrawsBackground(false);
             this.ivars()
                 .text_view
-                .setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(12.0, 0.0)))
-        };
-        unsafe {
+                .setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
+            this.ivars().text_view.setMinSize(NSSize::new(0.0, 0.0));
             this.ivars()
                 .text_view
-                .setTextColor(Some(&*NSColor::textColor()))
-        };
-        unsafe {
+                .setMaxSize(NSSize::new(100000.0, 100000.0));
+            this.ivars().text_view.setVerticallyResizable(true);
+            this.ivars().text_view.setHorizontallyResizable(false);
             this.ivars()
                 .text_view
-                .setBackgroundColor(&NSColor::textBackgroundColor())
+                .setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(11.5, 0.0)));
+            this.ivars()
+                .text_view
+                .setTextColor(Some(&*NSColor::labelColor()));
+            this.ivars()
+                .text_view
+                .setBackgroundColor(&NSColor::clearColor());
         };
 
         unsafe { scroll.setDocumentView(Some(&*this.ivars().text_view)) };
-        unsafe { stack.addView_inGravity(&toolbar, objc2_app_kit::NSStackViewGravity::Top) };
-        unsafe { stack.addView_inGravity(&scroll, objc2_app_kit::NSStackViewGravity::Top) };
-        unsafe { window.setContentView(Some(&stack)) };
+        let effect =
+            unsafe { NSVisualEffectView::initWithFrame(NSVisualEffectView::alloc(mtm), rect) };
+        unsafe {
+            effect.setMaterial(NSVisualEffectMaterial::HUDWindow);
+            effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+            effect.setState(NSVisualEffectState::Active);
 
-        this.ivars().window.set(window.clone());
+            toolbar.setTranslatesAutoresizingMaskIntoConstraints(false);
+            scroll.setTranslatesAutoresizingMaskIntoConstraints(false);
 
-        let buffer = crate::logger::LOG_BUFFER.lock().unwrap();
+            effect.addSubview(&toolbar);
+            effect.addSubview(&scroll);
+
+            toolbar
+                .topAnchor()
+                .constraintEqualToAnchor_constant(&effect.topAnchor(), 32.0)
+                .setActive(true);
+            toolbar
+                .leadingAnchor()
+                .constraintEqualToAnchor(&effect.leadingAnchor())
+                .setActive(true);
+            toolbar
+                .trailingAnchor()
+                .constraintEqualToAnchor(&effect.trailingAnchor())
+                .setActive(true);
+            toolbar
+                .heightAnchor()
+                .constraintEqualToConstant(36.0)
+                .setActive(true);
+
+            scroll
+                .topAnchor()
+                .constraintEqualToAnchor(&toolbar.bottomAnchor())
+                .setActive(true);
+            scroll
+                .leadingAnchor()
+                .constraintEqualToAnchor(&effect.leadingAnchor())
+                .setActive(true);
+            scroll
+                .trailingAnchor()
+                .constraintEqualToAnchor(&effect.trailingAnchor())
+                .setActive(true);
+            scroll
+                .bottomAnchor()
+                .constraintEqualToAnchor(&effect.bottomAnchor())
+                .setActive(true);
+
+            window.setContentView(Some(&effect));
+        };
+
+        let _ = this.ivars().window.set(window.clone());
+
+        let mut buffer = crate::logger::LOG_BUFFER.lock().unwrap();
+        if buffer.is_empty() {
+            buffer.push(crate::logger::LogMessage {
+                timestamp: chrono::Local::now().format("%H:%M:%S.%3f").to_string(),
+                thread_name: "MAIN".to_string(),
+                category: "SYSTEM".to_string(),
+                event: "Iridecence PDF Reader debug console initialized".to_string(),
+            });
+            buffer.push(crate::logger::LogMessage {
+                timestamp: chrono::Local::now().format("%H:%M:%S.%3f").to_string(),
+                thread_name: "MAIN".to_string(),
+                category: "UI".to_string(),
+                event: "Window geometry verified against visibleFrame".to_string(),
+            });
+            buffer.push(crate::logger::LogMessage {
+                timestamp: chrono::Local::now().format("%H:%M:%S.%3f").to_string(),
+                thread_name: "MAIN".to_string(),
+                category: "RENDER".to_string(),
+                event: "Liquid Glass HUDWindow material active".to_string(),
+            });
+        }
         let mut all_text = String::new();
         for msg in buffer.iter() {
             all_text.push_str(&format!(

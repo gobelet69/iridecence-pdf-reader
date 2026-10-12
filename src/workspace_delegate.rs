@@ -2,13 +2,13 @@ use crate::workspace::FileNode;
 use objc2::rc::Retained;
 use objc2::rc::Weak;
 use objc2::runtime::AnyObject;
-use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send};
+use objc2::{DefinedClass, MainThreadOnly, define_class};
 use objc2_app_kit::{
-    NSControl, NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
+    NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
     NSUserInterfaceItemIdentification, NSView,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSInteger, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+    MainThreadMarker, NSInteger, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
 };
 use std::cell::RefCell;
 
@@ -182,7 +182,7 @@ define_class!(
             let table_cell = unsafe { Retained::cast_unchecked::<NSTableCellView>(cell.clone()) };
 
             let is_dir = node.ivars().is_dir.get();
-            let symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
+            let _symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
 
             if let Some(iv) = unsafe { table_cell.imageView() } {
                 if node.ivars().is_loading_placeholder.get() {

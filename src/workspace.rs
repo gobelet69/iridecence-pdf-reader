@@ -3,7 +3,6 @@ use objc2::{ClassType, DefinedClass, Message, define_class, msg_send};
 use objc2_foundation::{NSObject, NSObjectProtocol};
 use std::cell::{Cell, RefCell};
 use std::fs;
-use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -36,7 +35,7 @@ define_class!(
         if let Some(entries) = data.take() {
             let mut children = Vec::new();
             for (path, name, is_dir, icloud_status, download_progress) in entries {
-                let mut child = FileNode::new(path, name, is_dir);
+                let child = FileNode::new(path, name, is_dir);
                 child.ivars().icloud_status.set(icloud_status);
                 child.ivars().download_progress.set(download_progress);
                 children.push(child);
@@ -117,7 +116,7 @@ impl FileNode {
                     unsafe {
                         use objc2::msg_send;
                         use objc2::runtime::AnyObject;
-                        use objc2_foundation::{NSNumber, NSString, NSURL};
+                        use objc2_foundation::{NSString, NSURL};
 
                         let url = NSURL::fileURLWithPath(&NSString::from_str(&path_str));
                         let mut status_val: *mut AnyObject = std::ptr::null_mut();

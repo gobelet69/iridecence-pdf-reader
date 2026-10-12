@@ -1,12 +1,9 @@
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{
-    AnyThread, ClassType, DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id, sel,
-};
+use objc2::{DeclaredClass, MainThreadOnly, define_class, msg_send, msg_send_id};
 use objc2_app_kit::*;
 use objc2_foundation::*;
 use objc2_pdf_kit::{PDFOutline, PDFView};
-use std::cell::RefCell;
 
 #[derive(Default)]
 pub struct PdfOutlineDelegateIvars {
@@ -61,6 +58,11 @@ define_class!(
                     return Retained::into_raw(child) as *mut AnyObject;
                 }
             } else {
+                if let Some(app) = unsafe {
+                    NSApplication::sharedApplication(MainThreadMarker::new().unwrap()).delegate()
+                } {
+                    let _: () = unsafe { msg_send![&app, recordHistory] };
+                }
                 if let Some(pdf_view) = self.ivars().pdf_view.get() {
                     if let Some(doc) = unsafe { pdf_view.document() } {
                         if let Some(root) = unsafe { doc.outlineRoot() } {
@@ -160,10 +162,26 @@ define_class!(
                             let outline: &PDFOutline =
                                 unsafe { &*(&*item as *const AnyObject as *const PDFOutline) };
                             if let Some(dest) = unsafe { outline.destination() } {
+                                if let Some(app) = unsafe {
+                                    NSApplication::sharedApplication(
+                                        MainThreadMarker::new().unwrap(),
+                                    )
+                                    .delegate()
+                                } {
+                                    let _: () = unsafe { msg_send![&app, recordHistory] };
+                                }
                                 if let Some(pdf_view) = self.ivars().pdf_view.get() {
                                     unsafe { pdf_view.goToDestination(&dest) };
                                 }
                             } else if let Some(action) = unsafe { outline.action() } {
+                                if let Some(app) = unsafe {
+                                    NSApplication::sharedApplication(
+                                        MainThreadMarker::new().unwrap(),
+                                    )
+                                    .delegate()
+                                } {
+                                    let _: () = unsafe { msg_send![&app, recordHistory] };
+                                }
                                 if let Some(pdf_view) = self.ivars().pdf_view.get() {
                                     unsafe { pdf_view.performAction(&action) };
                                 }

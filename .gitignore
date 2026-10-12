@@ -1,1 +1,49 @@
-/target
+# Rust build artifacts
+target
+target/
+target.nosync
+target.nosync/
+*.nosync/
+**/*.rs.bk
+*.rlib
+
+# macOS application bundles & symbols
+*.app/
+*.dSYM/
+*.dmg
+*.pkg
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Logs and runtime dumps
+*.log
+*.crash
+crash_backtrace.txt
+errors.txt
+check*.txt
+*.long-type-*.txt
+
+# Editor and IDE configurations
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Temporary test workspaces and benchmarks
+test_workspace/
+/tmp/
