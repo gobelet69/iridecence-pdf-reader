@@ -1,11 +1,12 @@
 # Rust build artifacts
-target
-target/
-target.nosync
+target*
 target.nosync/
 *.nosync/
 **/*.rs.bk
 *.rlib
+* [0-9]*
+*.orig
+
 
 # macOS application bundles & symbols
 *.app/
