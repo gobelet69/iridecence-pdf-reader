@@ -267,3 +267,59 @@ impl WindowGeometry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_window_geometry_min_max_bounds() {
+        let vis = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1440.0, 900.0));
+        for kind in [
+            WindowKind::Home,
+            WindowKind::Reader,
+            WindowKind::Palette,
+            WindowKind::DebugConsole,
+            WindowKind::Utility,
+        ] {
+            let min_w = WindowGeometry::min_width(vis, kind);
+            let max_w = WindowGeometry::max_width(vis, kind);
+            let min_h = WindowGeometry::min_height(vis, kind);
+            let max_h = WindowGeometry::max_height(vis, kind);
+
+            assert!(min_w <= max_w, "min_w must be <= max_w for {:?}", kind);
+            assert!(min_h <= max_h, "min_h must be <= max_h for {:?}", kind);
+
+            let (def_w, def_h) = WindowGeometry::default_size(vis, kind);
+            assert!(def_w >= min_w && def_w <= max_w, "default width in bounds for {:?}", kind);
+            assert!(def_h >= min_h && def_h <= max_h, "default height in bounds for {:?}", kind);
+        }
+    }
+
+    #[test]
+    fn test_window_geometry_sanitize_nan_and_inf() {
+        let vis = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1440.0, 900.0));
+        let bad_frame = NSRect::new(NSPoint::new(f64::NAN, 100.0), NSSize::new(800.0, f64::INFINITY));
+        let sanitized = WindowGeometry::sanitize_frame(bad_frame, vis, WindowKind::Reader);
+
+        assert!(sanitized.origin.x.is_finite());
+        assert!(sanitized.origin.y.is_finite());
+        assert!(sanitized.size.width.is_finite());
+        assert!(sanitized.size.height.is_finite());
+    }
+
+    #[test]
+    fn test_window_geometry_sanitize_offscreen_frame() {
+        let vis = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1440.0, 900.0));
+        // Window placed far out to the right and above visible screen
+        let offscreen = NSRect::new(NSPoint::new(5000.0, 5000.0), NSSize::new(1200.0, 800.0));
+        let sanitized = WindowGeometry::sanitize_frame(offscreen, vis, WindowKind::Reader);
+
+        // Sanity check: must be inside visible bounds
+        assert!(sanitized.origin.x >= vis.origin.x);
+        assert!(sanitized.origin.x + sanitized.size.width <= vis.origin.x + vis.size.width + 0.01);
+        assert!(sanitized.origin.y >= vis.origin.y);
+        assert!(sanitized.origin.y + sanitized.size.height <= vis.origin.y + vis.size.height + 0.01);
+    }
+}
+

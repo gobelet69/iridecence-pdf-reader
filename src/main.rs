@@ -719,7 +719,7 @@ define_class!(
                         defaults.setInteger_forKey(index, objc2_foundation::ns_string!("RightSidebarMode"));
                     }
                     if let Some(outline_scroll) = self.ivars().right_sidebar_outline_scroll.get() {
-                        let thumb_view = self.ivars().thumb_view.get().unwrap();
+                        let Some(thumb_view) = self.ivars().thumb_view.get() else { return; };
                         let search_container = self.ivars().right_sidebar_search_container.get();
                         let bookmarks_scroll = self.ivars().right_sidebar_bookmarks_scroll.get();
 
@@ -772,7 +772,8 @@ define_class!(
             crate::log_pdf!("[DIAGNOSTIC] PDF DID LOAD ENTER");
             if let Some(doc) = doc {
                 if let Some(url) = unsafe { doc.documentURL() } {
-                    let path = url.path().unwrap().to_string();
+                    let Some(path_ns) = (unsafe { url.path() }) else { return; };
+                    let path = path_ns.to_string();
                     let pending = self.ivars().pending_pdf_path.borrow().clone();
                     if path == pending || pending.is_empty() {
                         let mode = if self.ivars().content_mode.get() == AppContentMode::Workspace {
@@ -812,7 +813,7 @@ define_class!(
 
                             // Let's find or create the empty state view
                             let empty_tag = 999;
-                            let superview = scroll.superview().unwrap();
+                            let Some(superview) = scroll.superview() else { return; };
                             let mut existing_empty = None;
                             let subviews = superview.subviews();
                             for i in 0..subviews.count() {
@@ -829,51 +830,44 @@ define_class!(
                                 }
                             } else {
                                 if existing_empty.is_none() {
-                                    let mtm = MainThreadMarker::new().unwrap();
+                                    let mtm = MainThreadMarker::from(self);
                                     let empty_view = NSView::initWithFrame(NSView::alloc(mtm), scroll.frame());
                                     empty_view.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable);
                                     let _: () = objc2::msg_send![&empty_view, setTag: empty_tag];
 
                                     // SF Symbol list.bullet.indent
-                                    let img = NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("list.bullet.indent"), None).unwrap();
-                                    let img_view = NSImageView::imageViewWithImage(&img, mtm);
-                                    img_view.setContentTintColor(Some(&NSColor::tertiaryLabelColor()));
-                                    img_view.setTranslatesAutoresizingMaskIntoConstraints(false);
+                                    if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(objc2_foundation::ns_string!("list.bullet.indent"), None) {
+                                        let img_view = NSImageView::imageViewWithImage(&img, mtm);
+                                        img_view.setContentTintColor(Some(&NSColor::tertiaryLabelColor()));
+                                        img_view.setTranslatesAutoresizingMaskIntoConstraints(false);
 
-                                    let label = NSTextField::labelWithString(objc2_foundation::ns_string!("No document outline available"), mtm);
-                                    label.setTextColor(Some(&NSColor::secondaryLabelColor()));
-                                    label.setTranslatesAutoresizingMaskIntoConstraints(false);
+                                        let label = NSTextField::labelWithString(objc2_foundation::ns_string!("No document outline available"), mtm);
+                                        label.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                                        label.setTranslatesAutoresizingMaskIntoConstraints(false);
 
-                                    empty_view.addSubview(&img_view);
-                                    empty_view.addSubview(&label);
+                                        empty_view.addSubview(&img_view);
+                                        empty_view.addSubview(&label);
 
-                                    img_view.centerXAnchor().constraintEqualToAnchor(&empty_view.centerXAnchor()).setActive(true);
-                                    img_view.centerYAnchor().constraintEqualToAnchor_constant(&empty_view.centerYAnchor(), -20.0).setActive(true);
+                                        img_view.centerXAnchor().constraintEqualToAnchor(&empty_view.centerXAnchor()).setActive(true);
+                                        img_view.centerYAnchor().constraintEqualToAnchor_constant(&empty_view.centerYAnchor(), -12.0).setActive(true);
 
+                                        label.centerXAnchor().constraintEqualToAnchor(&empty_view.centerXAnchor()).setActive(true);
+                                        label.topAnchor().constraintEqualToAnchor_constant(&img_view.bottomAnchor(), 8.0).setActive(true);
+                                    }
 
-                                    label.centerXAnchor().constraintEqualToAnchor(&empty_view.centerXAnchor()).setActive(true);
-                                    label.topAnchor().constraintEqualToAnchor_constant(&img_view.bottomAnchor(), 16.0).setActive(true);
-
-                                    // Make sure it doesn't block hits if we need it to, but it's an empty state so it's fine.
-
-                                    // Hidden initially if outline isn't currently selected, but actually it sits on top of scroll, so we want it to show/hide with scroll.
-                                    // A better way: just add it to scroll's superview, and sync its hidden state with scroll's hidden state.
-                                    // Or better yet, we just add it to the content_wrapper, but toggle its visibility in switchSidebar.
                                     superview.addSubview(&empty_view);
                                 }
-                            }
 
-                            // We need to make sure the empty view's hidden state matches the outline scroll view's hidden state.
-                            if let Some(empty) = existing_empty.as_ref() {
-                                empty.setHidden(scroll.isHidden());
-                            } else {
-                                // If we just created it:
-                                let subviews = superview.subviews();
-                                for i in 0..subviews.count() {
-                                    let sub = subviews.objectAtIndex(i);
-                                    if sub.tag() == empty_tag {
-                                        sub.setHidden(scroll.isHidden());
-                                        break;
+                                if let Some(empty) = existing_empty.as_ref() {
+                                    empty.setHidden(scroll.isHidden());
+                                } else {
+                                    let subviews = superview.subviews();
+                                    for i in 0..subviews.count() {
+                                        let sub = subviews.objectAtIndex(i);
+                                        if sub.tag() == empty_tag {
+                                            sub.setHidden(scroll.isHidden());
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -887,7 +881,7 @@ define_class!(
         fn workspace_selection_changed(&self, sender: Option<&AnyObject>) {
             if let Some(sender) = sender {
                 if let Some(outline) = sender.downcast_ref::<NSOutlineView>() {
-                    let mtm = MainThreadMarker::new().unwrap();
+                    let mtm = MainThreadMarker::from(self);
                     let app = NSApplication::sharedApplication(mtm);
                     let mut is_click = false;
                     if let Some(event) = app.currentEvent() {
@@ -906,11 +900,13 @@ define_class!(
                                 let url_str = node.ivars().path.borrow().clone();
                                 let _url = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
 
-                                let current_doc = unsafe { self.ivars().pdf_view.get().unwrap().document() };
+                                let current_doc = self.ivars().pdf_view.get().and_then(|pv| unsafe { pv.document() });
                                 let mut already_open = false;
                                 if let Some(current_doc) = current_doc {
                                     if let Some(current_url) = unsafe { current_doc.documentURL() } {
-                                        if current_url.path().unwrap().to_string() == url_str { already_open = true; }
+                                        if let Some(p) = unsafe { current_url.path() } {
+                                            if p.to_string() == url_str { already_open = true; }
+                                        }
                                     }
                                 }
 
@@ -1205,11 +1201,13 @@ define_class!(
                 unsafe {
                     window.addChildWindow_ordered(panel, objc2_app_kit::NSWindowOrderingMode::Above);
                     panel.makeKeyAndOrderFront(None);
-                    if let Some(tf) = self.ivars().palette_delegate.get().unwrap().ivars().search_field.get() {
-                        let field_editor = panel.fieldEditor_forObject(true, Some(tf.as_ref()));
-                        if let Some(editor) = field_editor {
-                            let text_len = tf.stringValue().length();
-                            editor.setSelectedRange(objc2_foundation::NSRange::new(text_len, 0));
+                    if let Some(pal_del) = self.ivars().palette_delegate.get() {
+                        if let Some(tf) = pal_del.ivars().search_field.get() {
+                            let field_editor = panel.fieldEditor_forObject(true, Some(tf.as_ref()));
+                            if let Some(editor) = field_editor {
+                                let text_len = tf.stringValue().length();
+                                editor.setSelectedRange(objc2_foundation::NSRange::new(text_len, 0));
+                            }
                         }
                     }
                 }
@@ -1685,7 +1683,8 @@ define_class!(
             if let Some(url) = unsafe { doc.documentURL() } {
                 if let Some(page) = unsafe { pdf_view.currentPage() } {
                     let idx = unsafe { doc.indexForPage(&page) };
-                    let path = url.path().unwrap().to_string();
+                    let Some(path_ns) = (unsafe { url.path() }) else { return; };
+                    let path = path_ns.to_string();
                     let mut hist = self.ivars().history.borrow_mut();
                     let h_idx = self.ivars().history_index.get();
 
@@ -1708,13 +1707,14 @@ define_class!(
 
     #[unsafe(method(pdfPageChanged:))]
         fn pdf_page_changed(&self, _notification: &objc2_foundation::NSNotification) {
-            let pdf_view = self.ivars().pdf_view.get().unwrap();
+            let Some(pdf_view) = self.ivars().pdf_view.get() else { return; };
             unsafe {
                 if let Some(doc) = pdf_view.document() {
                     if let Some(url) = doc.documentURL() {
                         if let Some(page) = pdf_view.currentPage() {
                             let idx = doc.indexForPage(&page);
-                            let path = url.path().unwrap().to_string();
+                            let Some(path_ns) = url.path() else { return; };
+                            let path = path_ns.to_string();
 
                             let defaults = objc2_foundation::NSUserDefaults::standardUserDefaults();
                             let key = objc2_foundation::NSString::from_str(&format!("PDFPos_{}", path));
@@ -1749,13 +1749,14 @@ define_class!(
 
         #[unsafe(method(pdfScaleChanged:))]
         fn pdf_scale_changed(&self, _notification: &objc2_foundation::NSNotification) {
-            let pdf_view = self.ivars().pdf_view.get().unwrap();
+            let Some(pdf_view) = self.ivars().pdf_view.get() else { return; };
             unsafe {
                 if let Some(doc) = pdf_view.document() {
                     if let Some(url) = doc.documentURL() {
                         if let Some(page) = pdf_view.currentPage() {
                             let idx = doc.indexForPage(&page);
-                            let path = url.path().unwrap().to_string();
+                            let Some(path_ns) = url.path() else { return; };
+                            let path = path_ns.to_string();
 
                             let defaults = objc2_foundation::NSUserDefaults::standardUserDefaults();
                             let key = objc2_foundation::NSString::from_str(&format!("PDFPos_{}", path));
@@ -2815,6 +2816,20 @@ impl AppDelegate {
     }
 
     pub fn load_pdf_document(&self, doc: &PDFDocument, path: &str, target_mode: AppContentMode) {
+        let is_locked: bool = unsafe { objc2::msg_send![doc, isLocked] };
+        if is_locked {
+            crate::log_error!("Attempted to load locked/encrypted PDF: {}", path);
+            let mtm = MainThreadMarker::from(self);
+            let alert = objc2_app_kit::NSAlert::new(mtm);
+            alert.setMessageText(&NSString::from_str("Password Protected PDF"));
+            alert.setInformativeText(&NSString::from_str(
+                "This document is encrypted with a password. Please unlock it before viewing in Iridescence.",
+            ));
+            alert.addButtonWithTitle(&NSString::from_str("OK"));
+            let _ = unsafe { alert.runModal() };
+            return;
+        }
+
         self.ivars().content_mode.set(target_mode);
 
         if let Some(window) = self.ivars().window.get() {

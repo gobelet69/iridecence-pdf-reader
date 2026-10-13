@@ -1,0 +1,44 @@
+# Iridescence PDF Reader — Performance Budgets & Latency Thresholds
+# Tested on Apple Silicon (M-Series) baseline under macOS Sonoma / Sequoia
+
+[general]
+app_name = "Iridescence PDF Reader"
+bundle_id = "com.iridecence.pdfreader"
+baseline_target = "Apple Silicon macOS (M-series baseline, 14-inch display)"
+
+[latency]
+# Target maximum latencies in milliseconds
+app_launch_to_interactive_ms = 350
+home_screen_render_ms = 80
+open_standard_pdf_ms = 250
+open_large_pdf_ms = 600
+page_flip_ms = 16
+palette_open_ms = 16
+sidebar_switch_ms = 25
+workspace_search_filter_ms = 40
+index_deserialization_ms = 50
+
+[memory]
+# Resident Set Size (RSS) thresholds in Megabytes
+idle_home_screen_max_mb = 85
+single_document_active_max_mb = 160
+large_document_active_max_mb = 280
+workspace_500_items_max_mb = 220
+peak_ocr_session_max_mb = 380
+
+[resources]
+max_log_buffer_entries = 2000
+max_workspace_indexed_files = 50000
+max_workspace_path_len_bytes = 4096
+max_workspace_pages_per_doc = 25000
+max_indexed_text_per_page_bytes = 100000
+max_directory_traversal_depth = 25
+max_collected_pdfs = 10000
+
+[ui_geometry]
+min_window_width_pt = 740.0
+min_window_height_pt = 480.0
+default_window_width_pt = 1000.0
+default_window_height_pt = 680.0
+max_window_width_ratio = 0.92
+max_window_height_ratio = 0.90

@@ -2,7 +2,7 @@ use crate::workspace::FileNode;
 use objc2::rc::Retained;
 use objc2::rc::Weak;
 use objc2::runtime::AnyObject;
-use objc2::{DefinedClass, MainThreadOnly, define_class};
+use objc2::{DefinedClass, MainThreadOnly, Message, define_class};
 use objc2_app_kit::{
     NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
     NSUserInterfaceItemIdentification, NSView,
@@ -38,7 +38,7 @@ define_class!(
         if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
             if let Some(outline_view) = weak_view.load() {
                 let node: Option<objc2::rc::Retained<crate::workspace::FileNode>> = unsafe { objc2::msg_send_id![notification, object] };
-                let node = node.unwrap();
+                let Some(node) = node else { return; };
                 let mut is_root = false;
                 if let Some(root) = self.ivars().root_node.borrow().as_ref() {
                     if std::ptr::eq(&**root, &*node) {
@@ -60,7 +60,7 @@ define_class!(
     #[unsafe(method(outlineViewSelectionDidChange:))]
     fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
         let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send_id![notification, object] };
-        let outline_view = outline_view.unwrap();
+        let Some(outline_view) = outline_view else { return; };
         let selected_row = unsafe { outline_view.selectedRow() };
         if selected_row >= 0 {
             if let Some(item) = unsafe { outline_view.itemAtRow(selected_row) } {
@@ -109,7 +109,13 @@ define_class!(
             };
 
             let children = node.ivars().children.borrow();
-            let child = &children.as_ref().unwrap()[index as usize];
+            let Some(children_vec) = children.as_ref() else {
+                return std::ptr::null_mut();
+            };
+            if index < 0 || (index as usize) >= children_vec.len() {
+                return std::ptr::null_mut();
+            }
+            let child = &children_vec[index as usize];
             let retained = unsafe { Retained::cast_unchecked::<AnyObject>(child.clone()) };
             // Auto-release the pointer to return +0 to Objective-C
             Retained::autorelease_ptr(retained)
@@ -124,7 +130,7 @@ define_class!(
         #[unsafe(method(outlineView:viewForTableColumn:item:))]
         fn outlineView_viewForTableColumn_item(&self, outline_view: &NSOutlineView, _table_column: Option<&NSTableColumn>, item: &AnyObject) -> *mut NSView {
             let node: &FileNode = unsafe { &*(item as *const AnyObject as *const FileNode) };
-            let mtm = MainThreadMarker::new().unwrap();
+            let mtm = MainThreadMarker::from(self);
 
             let id = objc2_foundation::ns_string!("FileCell");
             let mut view = unsafe { outline_view.makeViewWithIdentifier_owner(id, None) };
@@ -178,7 +184,9 @@ define_class!(
                 view = Some(unsafe { Retained::cast_unchecked::<NSView>(cell) });
             }
 
-            let cell = view.unwrap();
+            let Some(cell) = view else {
+                return std::ptr::null_mut();
+            };
             let table_cell = unsafe { Retained::cast_unchecked::<NSTableCellView>(cell.clone()) };
 
             let is_dir = node.ivars().is_dir.get();
@@ -302,9 +310,7 @@ impl WorkspaceDelegate {
         target_path: &str,
     ) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
         if node.ivars().path.borrow().as_str() == target_path {
-            return Some(
-                unsafe { objc2::rc::Retained::retain(node as *const _ as *mut _) }.unwrap(),
-            );
+            return Some(node.retain());
         }
         if let Some(children) = node.ivars().children.borrow().as_ref() {
             for child in children {

@@ -304,3 +304,33 @@ pub fn show_save_panel(
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_annotation_type_subtypes() {
+        assert_eq!(AnnotationType::Highlight.subtype_string(), "Highlight");
+        assert_eq!(AnnotationType::Underline.subtype_string(), "Underline");
+        assert_eq!(AnnotationType::Strikeout.subtype_string(), "StrikeOut");
+        assert_eq!(AnnotationType::TextNote.subtype_string(), "Text");
+    }
+
+    #[test]
+    fn test_annotation_type_symbols() {
+        assert_eq!(AnnotationType::Highlight.system_symbol_name(), "highlighter");
+        assert_eq!(AnnotationType::Underline.system_symbol_name(), "underline");
+        assert_eq!(AnnotationType::Strikeout.system_symbol_name(), "strikethrough");
+        assert_eq!(AnnotationType::TextNote.system_symbol_name(), "note.text");
+    }
+
+    #[test]
+    fn test_annotation_type_display_names() {
+        assert_eq!(AnnotationType::Highlight.display_name(), "Highlight");
+        assert_eq!(AnnotationType::Underline.display_name(), "Underline");
+        assert_eq!(AnnotationType::Strikeout.display_name(), "Strikeout");
+        assert_eq!(AnnotationType::TextNote.display_name(), "Note");
+    }
+}
+

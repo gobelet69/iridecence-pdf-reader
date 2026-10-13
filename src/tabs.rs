@@ -535,3 +535,67 @@ pub fn update_tab_bar(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tab_manager_initial_state() {
+        let mgr = TabManager::new();
+        assert!(mgr.is_empty());
+        assert_eq!(mgr.tab_count(), 0);
+        assert_eq!(mgr.next_index(), 0);
+        assert_eq!(mgr.prev_index(), 0);
+        assert!(mgr.active_tab().is_none());
+    }
+
+    #[test]
+    fn test_tab_manager_out_of_bounds_remove() {
+        let mut mgr = TabManager::new();
+        assert!(mgr.remove_tab(0).is_none());
+        assert!(mgr.remove_tab(10).is_none());
+    }
+
+    #[test]
+    fn test_tab_manager_lifecycle_and_navigation() {
+        let mut mgr = TabManager::new();
+        let doc1 = unsafe { PDFDocument::new() };
+        let doc2 = unsafe { PDFDocument::new() };
+        let doc3 = unsafe { PDFDocument::new() };
+
+        let idx1 = mgr.add_tab("/path/1.pdf".to_string(), "Doc 1".to_string(), doc1, AppContentMode::StandaloneDocument);
+        assert_eq!(idx1, 0);
+        assert_eq!(mgr.active_index, 0);
+        assert_eq!(mgr.tab_count(), 1);
+
+        let idx2 = mgr.add_tab("/path/2.pdf".to_string(), "Doc 2".to_string(), doc2, AppContentMode::StandaloneDocument);
+        assert_eq!(idx2, 1);
+        assert_eq!(mgr.active_index, 1);
+        assert_eq!(mgr.tab_count(), 2);
+
+        let idx3 = mgr.add_tab("/path/3.pdf".to_string(), "Doc 3".to_string(), doc3, AppContentMode::StandaloneDocument);
+        assert_eq!(idx3, 2);
+        assert_eq!(mgr.active_index, 2);
+        assert_eq!(mgr.tab_count(), 3);
+
+        // Test navigation
+        assert_eq!(mgr.next_index(), 0); // Wrap around to 0
+        assert_eq!(mgr.prev_index(), 1);
+
+        mgr.active_index = 0;
+        assert_eq!(mgr.prev_index(), 2); // Wrap around backwards to 2
+
+        // Test find by path
+        assert_eq!(mgr.find_tab_by_path("/path/2.pdf"), Some(1));
+        assert_eq!(mgr.find_tab_by_path("/path/unknown.pdf"), None);
+
+        // Test removing active tab
+        mgr.active_index = 2;
+        let removed = mgr.remove_tab(2);
+        assert!(removed.is_some());
+        assert_eq!(mgr.tab_count(), 2);
+        assert_eq!(mgr.active_index, 1); // Shifted down to last remaining
+    }
+}
+
