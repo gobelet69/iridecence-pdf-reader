@@ -28,10 +28,10 @@
 
 ## Download
 
-Grab the latest pre-built app from the **[Releases page](https://github.com/gobelet69/iridecence-pdf-reader/releases/latest)**:
+Grab the latest `.dmg` installer from the **[Releases page](https://github.com/gobelet69/iridecence-pdf-reader/releases/latest)**:
 
-1. Download `Iridecence-PDF-Reader-vX.Y.Z-macOS-arm64.zip` and unzip it.
-2. Move **Iridecence PDF Reader.app** to `/Applications`.
+1. Download `Iridecence-PDF-Reader-v0.5.0-macOS-arm64.dmg` and open it.
+2. Drag **Iridecence PDF Reader.app** into the **Applications** folder.
 3. The build is not notarized yet. On first launch, right-click the app → **Open**, or run:
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Iridecence PDF Reader.app"
