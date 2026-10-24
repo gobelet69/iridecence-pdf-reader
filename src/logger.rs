@@ -98,7 +98,11 @@ mod tests {
             Err(p) => p.into_inner(),
         };
         assert!(!buffer.is_empty());
-        assert!(buffer.iter().any(|e| e.category == "TEST_CAT" && e.event == "Hello world from test"));
+        assert!(
+            buffer
+                .iter()
+                .any(|e| e.category == "TEST_CAT" && e.event == "Hello world from test")
+        );
     }
 
     #[test]

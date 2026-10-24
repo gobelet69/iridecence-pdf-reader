@@ -2211,7 +2211,8 @@ define_class!(
                 let open_folder_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Open Folder..."), Some(objc2::sel!(openFolder:)), &objc2_foundation::NSString::from_str("O"));
                 let save_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Save"), Some(objc2::sel!(saveDocument:)), &objc2_foundation::NSString::from_str("s"));
                 let save_as_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Save As..."), Some(objc2::sel!(saveDocumentAs:)), &objc2_foundation::NSString::from_str("S"));
-                let home_screen_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Home Screen"), Some(objc2::sel!(showHomeScreen:)), &objc2_foundation::NSString::from_str("H"));
+                let home_screen_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Home Screen"), Some(objc2::sel!(showHomeScreen:)), &objc2_foundation::NSString::from_str("h"));
+                home_screen_item.setKeyEquivalentModifierMask(objc2_app_kit::NSEventModifierFlags::Command | objc2_app_kit::NSEventModifierFlags::Option);
                 let close_tab_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Close Tab"), Some(objc2::sel!(closeTab:)), &objc2_foundation::NSString::from_str("w"));
 
                 file_menu.addItem(&new_tab_item);
@@ -2255,7 +2256,7 @@ define_class!(
 
                 let highlight_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Highlight Selection"), Some(objc2::sel!(highlightSelection:)), &objc2_foundation::NSString::from_str("H"));
                 let underline_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Underline Selection"), Some(objc2::sel!(underlineSelection:)), &objc2_foundation::NSString::from_str("U"));
-                let strikeout_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Strikeout Selection"), Some(objc2::sel!(strikeoutSelection:)), &objc2_foundation::NSString::from_str(""));
+                let strikeout_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Strikeout Selection"), Some(objc2::sel!(strikeoutSelection:)), &objc2_foundation::NSString::from_str("X"));
                 let add_note_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Add Note to Selection..."), Some(objc2::sel!(addNoteSelection:)), &objc2_foundation::NSString::from_str("N"));
                 let copy_ref_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Copy Page Reference"), Some(objc2::sel!(copyPageReference:)), &objc2_foundation::NSString::from_str(""));
                 let copy_with_ref_item = NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &objc2_foundation::NSString::from_str("Copy with Page Reference"), Some(objc2::sel!(copyWithPageReference:)), &objc2_foundation::NSString::from_str(""));
@@ -3248,7 +3249,11 @@ impl AppDelegate {
         } else {
             "Document.pdf".to_string()
         };
-        let doc = self.ivars().pdf_view.get().and_then(|v| unsafe { v.document() });
+        let doc = self
+            .ivars()
+            .pdf_view
+            .get()
+            .and_then(|v| unsafe { v.document() });
         (doc, canon_path, title)
     }
 
@@ -3635,7 +3640,14 @@ impl AppDelegate {
                 ("Page Size", page_dim_str),
                 ("File Size", size_str),
                 ("Format", "PDF (Portable Document Format)".to_string()),
-                ("Location", if !path.is_empty() { path.clone() } else { "Unsaved Document".to_string() }),
+                (
+                    "Location",
+                    if !path.is_empty() {
+                        path.clone()
+                    } else {
+                        "Unsaved Document".to_string()
+                    },
+                ),
             ];
 
             let mut y = h - 108.0;
@@ -4780,7 +4792,8 @@ pub fn apply_thumbnail_styling(tv: &PDFThumbnailView) {
                         inSection: 0 as objc2_foundation::NSInteger
                     ];
                     let is_selected: bool = msg_send![paths, containsObject: path];
-                    let item: *mut objc2::runtime::AnyObject = msg_send![cv_ptr, itemAtIndexPath: path];
+                    let item: *mut objc2::runtime::AnyObject =
+                        msg_send![cv_ptr, itemAtIndexPath: path];
                     if item.is_null() {
                         continue;
                     }
@@ -4801,11 +4814,13 @@ pub fn apply_thumbnail_styling(tv: &PDFThumbnailView) {
                                 }
                             }
                             if let Some(l) = sub.layer() {
-                                let sublayers: *mut objc2::runtime::AnyObject = msg_send![&*l, sublayers];
+                                let sublayers: *mut objc2::runtime::AnyObject =
+                                    msg_send![&*l, sublayers];
                                 if !sublayers.is_null() {
                                     let c: usize = msg_send![sublayers, count];
                                     for idx in 0..c {
-                                        let sl: *mut objc2::runtime::AnyObject = msg_send![sublayers, objectAtIndex: idx];
+                                        let sl: *mut objc2::runtime::AnyObject =
+                                            msg_send![sublayers, objectAtIndex: idx];
                                         let _: () = msg_send![sl, setHidden: true];
                                     }
                                 }
@@ -4813,11 +4828,13 @@ pub fn apply_thumbnail_styling(tv: &PDFThumbnailView) {
                         } else if sub.class().name().to_bytes() == b"NSImageView" {
                             sub.setWantsLayer(true);
                             if let Some(l) = sub.layer() {
-                                let sublayers: *mut objc2::runtime::AnyObject = msg_send![&*l, sublayers];
+                                let sublayers: *mut objc2::runtime::AnyObject =
+                                    msg_send![&*l, sublayers];
                                 if !sublayers.is_null() {
                                     let c: usize = msg_send![sublayers, count];
                                     for idx in 0..c {
-                                        let sl: *mut objc2::runtime::AnyObject = msg_send![sublayers, objectAtIndex: idx];
+                                        let sl: *mut objc2::runtime::AnyObject =
+                                            msg_send![sublayers, objectAtIndex: idx];
                                         let _: () = msg_send![sl, setHidden: true];
                                     }
                                 }
@@ -4828,7 +4845,8 @@ pub fn apply_thumbnail_styling(tv: &PDFThumbnailView) {
                                     let _: () = msg_send![&*l, setShadowColor: ptr_accent];
                                     let _: () = msg_send![&*l, setShadowOpacity: 0.4_f32];
                                     let _: () = msg_send![&*l, setShadowRadius: 4.0_f64];
-                                    let _: () = msg_send![&*l, setShadowOffset: NSSize::new(0.0, 0.0)];
+                                    let _: () =
+                                        msg_send![&*l, setShadowOffset: NSSize::new(0.0, 0.0)];
                                 } else {
                                     let _: () = msg_send![&*l, setBorderWidth: 0.0_f64];
                                     let _: () = msg_send![&*l, setShadowOpacity: 0.0_f32];
@@ -4857,10 +4875,20 @@ mod thumb_tests {
     fn test_thumbnail_selection_styling_removes_pill_and_adds_accent_border() {
         let mtm = unsafe { MainThreadMarker::new_unchecked() };
         let _app = unsafe { objc2_app_kit::NSApplication::sharedApplication(mtm) };
-        let pdf_view = unsafe { PDFView::initWithFrame(PDFView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 600.0))) };
-        let tv = unsafe { PDFThumbnailView::initWithFrame(PDFThumbnailView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 400.0))) };
+        let pdf_view = unsafe {
+            PDFView::initWithFrame(
+                PDFView::alloc(mtm),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 600.0)),
+            )
+        };
+        let tv = unsafe {
+            PDFThumbnailView::initWithFrame(
+                PDFThumbnailView::alloc(mtm),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 400.0)),
+            )
+        };
         unsafe { tv.setPDFView(Some(&pdf_view)) };
-        
+
         let doc = unsafe { PDFDocument::new() };
         let p1 = unsafe { objc2_pdf_kit::PDFPage::new() };
         let p2 = unsafe { objc2_pdf_kit::PDFPage::new() };
@@ -4868,14 +4896,16 @@ mod thumb_tests {
             doc.insertPage_atIndex(&p1, 0);
             doc.insertPage_atIndex(&p2, 1);
             pdf_view.setDocument(Some(&doc));
-            let _ = NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.1));
+            let _ = NSRunLoop::currentRunLoop()
+                .runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.1));
         }
         unsafe {
             tv.setAllowsMultipleSelection(false);
             if let Some(p0) = doc.pageAtIndex(0) {
                 pdf_view.goToPage(&p0);
             }
-            let _ = NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.1));
+            let _ = NSRunLoop::currentRunLoop()
+                .runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.1));
         }
 
         apply_thumbnail_styling(&tv);
@@ -4892,7 +4922,8 @@ mod thumb_tests {
                         indexPathForItem: 0 as objc2_foundation::NSInteger,
                         inSection: 0 as objc2_foundation::NSInteger
                     ];
-                    let item: *mut objc2::runtime::AnyObject = msg_send![cv_ptr, itemAtIndexPath: path];
+                    let item: *mut objc2::runtime::AnyObject =
+                        msg_send![cv_ptr, itemAtIndexPath: path];
                     if !item.is_null() {
                         let item_view: *mut NSView = msg_send![item, view];
                         let subviews = (*item_view).subviews();
@@ -4903,13 +4934,18 @@ mod thumb_tests {
                                     assert!(!tf.drawsBackground());
                                 }
                                 if let Some(l) = sub.layer() {
-                                    let sublayers: *mut objc2::runtime::AnyObject = msg_send![&*l, sublayers];
+                                    let sublayers: *mut objc2::runtime::AnyObject =
+                                        msg_send![&*l, sublayers];
                                     if !sublayers.is_null() {
                                         let c: usize = msg_send![sublayers, count];
                                         for idx in 0..c {
-                                            let sl: *mut objc2::runtime::AnyObject = msg_send![sublayers, objectAtIndex: idx];
+                                            let sl: *mut objc2::runtime::AnyObject =
+                                                msg_send![sublayers, objectAtIndex: idx];
                                             let is_hidden: bool = msg_send![sl, isHidden];
-                                            assert!(is_hidden, "TextField selection pill sublayer must be hidden");
+                                            assert!(
+                                                is_hidden,
+                                                "TextField selection pill sublayer must be hidden"
+                                            );
                                         }
                                     }
                                 }
@@ -4918,7 +4954,10 @@ mod thumb_tests {
                                     let bw: f64 = msg_send![&*l, borderWidth];
                                     let cr: f64 = msg_send![&*l, cornerRadius];
                                     assert_eq!(bw, 2.0, "Selected thumbnail must have 2.0 border");
-                                    assert_eq!(cr, 4.0, "Selected thumbnail must have 4.0 corner radius");
+                                    assert_eq!(
+                                        cr, 4.0,
+                                        "Selected thumbnail must have 4.0 corner radius"
+                                    );
                                     *verified = true;
                                 }
                             }

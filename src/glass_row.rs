@@ -1,6 +1,6 @@
 use objc2::rc::Retained;
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send};
-use objc2_app_kit::{NSColor, NSTableView, NSTableRowView};
+use objc2_app_kit::{NSColor, NSTableRowView, NSTableView};
 use objc2_foundation::{MainThreadMarker, NSInteger, NSObjectProtocol, NSPoint, NSRect, NSSize};
 
 #[derive(Default)]
@@ -150,11 +150,7 @@ impl HoverCoordinator {
             if unsafe { objc2_foundation::NSPointInRect(mouse_table, vis_rect) } {
                 let r = unsafe { table.rowAtPoint(mouse_table) };
                 let count = unsafe { table.numberOfRows() };
-                if r >= 0 && r < count {
-                    Some(r)
-                } else {
-                    None
-                }
+                if r >= 0 && r < count { Some(r) } else { None }
             } else {
                 None
             };

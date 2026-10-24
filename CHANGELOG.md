@@ -25,9 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `Cmd+I` showing the wrong document identity / path.
 - Save writing to the wrong (or no) destination; "Save As…" now migrates tab, title, recents and bookmarks.
 - Intermittent missed clicks when switching tabs.
+- Resolved `Cmd+Shift+H` menu shortcut collision: **Home Screen** now uses `Cmd+Option+H` (`⌥⌘H`), freeing `Cmd+Shift+H` (`⇧⌘H`) for **Highlight Selection**, added `Cmd+Shift+X` (`⇧⌘X`) for **Strikeout Selection**, and synchronized all Command Palette shortcut badges with the native AppKit menus.
+- Home screen header divider spacing and sidebar group-row border artifact.
 
 ### Changed
 - App version bumped to 0.5.0 (`Cargo.toml`, `Info.plist`).
+- Formatted entire Rust codebase with `rustfmt` and refreshed all documentation screenshots in `docs/screenshots/`.
 
 ---
 

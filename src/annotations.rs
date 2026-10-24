@@ -153,7 +153,8 @@ pub fn add_annotation_to_selection(
         unsafe {
             annot.setColor(&color);
             if annot_type != AnnotationType::TextNote {
-                let mut quad_points: Vec<Retained<AnyObject>> = Vec::with_capacity(line_rects.len() * 4);
+                let mut quad_points: Vec<Retained<AnyObject>> =
+                    Vec::with_capacity(line_rects.len() * 4);
                 for rect in &line_rects {
                     let p_tl: Retained<AnyObject> = msg_send![
                         objc2::class!(NSValue),
@@ -483,6 +484,9 @@ mod tests {
         let q_out: *mut AnyObject = unsafe { msg_send![&annot, quadrilateralPoints] };
         assert!(!q_out.is_null());
         let count: usize = unsafe { msg_send![q_out, count] };
-        assert_eq!(count, 8, "Expected 8 quad points for 2 selected lines (4 points per line)");
+        assert_eq!(
+            count, 8,
+            "Expected 8 quad points for 2 selected lines (4 points per line)"
+        );
     }
 }

@@ -14,12 +14,7 @@ pub struct EmptyStateView {
 }
 
 impl EmptyStateView {
-    pub fn new(
-        mtm: MainThreadMarker,
-        symbol: &str,
-        title: &str,
-        subtitle: &str,
-    ) -> Self {
+    pub fn new(mtm: MainThreadMarker, symbol: &str, title: &str, subtitle: &str) -> Self {
         let container = unsafe { NSView::new(mtm) };
         container.setTranslatesAutoresizingMaskIntoConstraints(false);
 
@@ -41,7 +36,8 @@ impl EmptyStateView {
         title_label.setUsesSingleLineMode(false);
         title_label.setLineBreakMode(NSLineBreakMode::ByWordWrapping);
 
-        let subtitle_label = unsafe { NSTextField::labelWithString(&NSString::from_str(subtitle), mtm) };
+        let subtitle_label =
+            unsafe { NSTextField::labelWithString(&NSString::from_str(subtitle), mtm) };
         subtitle_label.setTranslatesAutoresizingMaskIntoConstraints(false);
         subtitle_label.setFont(Some(&NSFont::systemFontOfSize(11.5)));
         subtitle_label.setTextColor(Some(&NSColor::tertiaryLabelColor()));
@@ -58,12 +54,30 @@ impl EmptyStateView {
 
             container.addSubview(&stack);
 
-            stack.centerXAnchor().constraintEqualToAnchor(&container.centerXAnchor()).setActive(true);
-            stack.centerYAnchor().constraintEqualToAnchor_constant(&container.centerYAnchor(), -20.0).setActive(true);
-            stack.leadingAnchor().constraintGreaterThanOrEqualToAnchor_constant(&container.leadingAnchor(), 16.0).setActive(true);
-            stack.trailingAnchor().constraintLessThanOrEqualToAnchor_constant(&container.trailingAnchor(), -16.0).setActive(true);
-            title_label.widthAnchor().constraintLessThanOrEqualToConstant(200.0).setActive(true);
-            subtitle_label.widthAnchor().constraintLessThanOrEqualToConstant(200.0).setActive(true);
+            stack
+                .centerXAnchor()
+                .constraintEqualToAnchor(&container.centerXAnchor())
+                .setActive(true);
+            stack
+                .centerYAnchor()
+                .constraintEqualToAnchor_constant(&container.centerYAnchor(), -20.0)
+                .setActive(true);
+            stack
+                .leadingAnchor()
+                .constraintGreaterThanOrEqualToAnchor_constant(&container.leadingAnchor(), 16.0)
+                .setActive(true);
+            stack
+                .trailingAnchor()
+                .constraintLessThanOrEqualToAnchor_constant(&container.trailingAnchor(), -16.0)
+                .setActive(true);
+            title_label
+                .widthAnchor()
+                .constraintLessThanOrEqualToConstant(200.0)
+                .setActive(true);
+            subtitle_label
+                .widthAnchor()
+                .constraintLessThanOrEqualToConstant(200.0)
+                .setActive(true);
         }
 
         let this = Self {
@@ -88,7 +102,8 @@ impl EmptyStateView {
         ) {
             let configured = img.imageWithSymbolConfiguration(&icon_cfg);
             unsafe {
-                self.icon_view.setImage(configured.as_deref().or(Some(&img)));
+                self.icon_view
+                    .setImage(configured.as_deref().or(Some(&img)));
             }
         }
     }
@@ -96,7 +111,8 @@ impl EmptyStateView {
     pub fn set_text(&self, title: &str, subtitle: &str) {
         unsafe {
             self.title_label.setStringValue(&NSString::from_str(title));
-            self.subtitle_label.setStringValue(&NSString::from_str(subtitle));
+            self.subtitle_label
+                .setStringValue(&NSString::from_str(subtitle));
         }
     }
 

@@ -490,7 +490,9 @@ impl WorkspaceDelegate {
                 nc.addObserver_selector_name_object(
                     self,
                     objc2::sel!(outlineDidScroll:),
-                    Some(objc2_foundation::ns_string!("NSViewBoundsDidChangeNotification")),
+                    Some(objc2_foundation::ns_string!(
+                        "NSViewBoundsDidChangeNotification"
+                    )),
                     Some(&clip),
                 );
             }

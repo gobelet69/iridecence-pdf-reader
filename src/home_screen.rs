@@ -433,14 +433,7 @@ define_class!(
         }
 
         #[unsafe(method(tableView:isGroupRow:))]
-        fn table_view_is_group_row(&self, table_view: &NSTableView, row: NSInteger) -> objc2::runtime::Bool {
-            let identifier = unsafe { table_view.identifier() };
-            if identifier.map(|s| s.to_string()).unwrap_or_default() == "SidebarTable" {
-                let items = self.ivars().sidebar_items.borrow();
-                if let Some(SidebarItem::Header(_)) = items.get(row as usize) {
-                    return true.into();
-                }
-            }
+        fn table_view_is_group_row(&self, _table_view: &NSTableView, _row: NSInteger) -> objc2::runtime::Bool {
             false.into()
         }
 
@@ -1271,10 +1264,16 @@ impl HomeScreen {
                     .constraintEqualToAnchor(&subtitle_label.centerYAnchor()),
                 &*action_stack
                     .leadingAnchor()
-                    .constraintGreaterThanOrEqualToAnchor_constant(&subtitle_label.trailingAnchor(), 16.0),
+                    .constraintGreaterThanOrEqualToAnchor_constant(
+                        &subtitle_label.trailingAnchor(),
+                        16.0,
+                    ),
                 &*action_stack
                     .topAnchor()
-                    .constraintGreaterThanOrEqualToAnchor_constant(&search_field.bottomAnchor(), 6.0),
+                    .constraintGreaterThanOrEqualToAnchor_constant(
+                        &search_field.bottomAnchor(),
+                        6.0,
+                    ),
             ]));
         }
 
@@ -1390,7 +1389,9 @@ impl HomeScreen {
             nc.addObserver_selector_name_object(
                 &*delegate,
                 sel!(tableDidScroll:),
-                Some(objc2_foundation::ns_string!("NSViewBoundsDidChangeNotification")),
+                Some(objc2_foundation::ns_string!(
+                    "NSViewBoundsDidChangeNotification"
+                )),
                 Some(&clip),
             );
         }
@@ -1471,7 +1472,7 @@ impl HomeScreen {
                 &*header_view
                     .trailingAnchor()
                     .constraintEqualToAnchor(&right_container.trailingAnchor()),
-                &*header_view.heightAnchor().constraintEqualToConstant(62.0),
+                &*header_view.heightAnchor().constraintEqualToConstant(78.0),
                 &*separator
                     .topAnchor()
                     .constraintEqualToAnchor(&header_view.bottomAnchor()),

@@ -729,7 +729,10 @@ mod tests {
             assert!(mgr.tab_count() >= 1);
             assert!(mgr.active_index < mgr.tab_count());
             assert!(mgr.active_tab().is_some());
-            assert_eq!(mgr.active_tab().unwrap().title, format!("Doc {}", target_tab));
+            assert_eq!(
+                mgr.active_tab().unwrap().title,
+                format!("Doc {}", target_tab)
+            );
         }
     }
 }

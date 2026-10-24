@@ -49,9 +49,13 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 - Dynamic responsive window geometry tailored for 13-inch MacBook Air displays through 6K Pro Display XDR screens.
 - Automatic Dark Mode and Light Mode adaptation following the system appearance.
 
+| Workspace Reader (Light) | Workspace Reader (Dark) |
+|:---:|:---:|
+| <img src="docs/screenshots/reader-workspace-light.png" width="420" alt="Workspace Reader Light"> | <img src="docs/screenshots/reader-workspace-dark.png" width="420" alt="Workspace Reader Dark"> |
+
 | Home Screen (Light) | Home Screen (Dark) |
 |:---:|:---:|
-| <img src="docs/screenshots/home-light.png" width="400"> | <img src="docs/screenshots/home-dark.png" width="400"> |
+| <img src="docs/screenshots/home-light.png" width="420" alt="Home Screen Light"> | <img src="docs/screenshots/home-dark.png" width="420" alt="Home Screen Dark"> |
 
 ### 📑 Native Multi-Document Tabs
 - Safari/Finder-inspired top tab bar (`Cmd+T`, `Cmd+W`).
@@ -61,42 +65,50 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 - Reliable click targets: the tab bar always sits above the document view, so tab switching never misses a click.
 
 <p align="center">
-  <img src="docs/screenshots/tabs.png" alt="Multi-Document Tabs" width="800">
+  <img src="docs/screenshots/tabs.png" alt="Multi-Document Tabs" width="820">
 </p>
 
 ### 🖊️ Annotations & Safe Atomic Saving
-- Native PDFKit annotations: **Highlight**, **Underline**, **Strikeout**, and **Text Notes / Comments**. Markup is applied line by line, so selections spanning several lines are fully covered.
+- Native PDFKit annotations: **Highlight** (`Cmd+Shift+H`), **Underline** (`Cmd+Shift+U`), **Strikeout** (`Cmd+Shift+X`), and **Text Notes / Comments** (`Cmd+Shift+N`). Markup is applied line by line, so selections spanning several lines are fully covered.
 - Direct context menu integration on text selection: Copy, Copy with Page Reference, Copy as Markdown Quote, Search Selection, and Annotate.
 - Safe atomic persistence (`Cmd+S`, `Cmd+Shift+S`): Writes to a temporary file, verifies integrity, and atomically renames. Saving always targets the active tab's real file; "Save As…" updates the tab, window title, recents and bookmarks to the new path.
 - **Protected Directory Guard**: Strictly blocks write operations to configured read-only repositories (e.g. `MASTER`), prompting for "Save As..." instead.
 
 <p align="center">
-  <img src="docs/screenshots/annotations.png" alt="Native Annotations" width="800">
+  <img src="docs/screenshots/annotations.png" alt="Native Annotations" width="820">
 </p>
 
-### 🔖 Bookmarks & Document Info
-- Toggle a page bookmark with `Cmd+D`. Bookmarks and annotations are listed together in the sidebar inspector (with page numbers and type icons); clicking an entry jumps to its page. Native empty states are shown when there is nothing to list.
-- `Cmd+I` opens a Document Info inspector for the **active** tab: file name, location, file size, page count, page size and PDF format.
+### 🔖 Outline, Bookmarks & Document Info
+- **Hierarchical Table of Contents**: Expandable nested PDF outline tree in the right sidebar with direct section jump.
+- **Bookmarks & Annotations Inspector**: Toggle a page bookmark with `Cmd+D`. Bookmarks and annotations are listed with page numbers and type icons; clicking an entry jumps directly to its page. Native empty states are shown when there is nothing to list.
+- **Document Info (`Cmd+I`)**: Native inspector displaying the active tab's file name, full path, file size, page count, current reading page, and page dimensions.
+
+| Nested Outline & Workspace | Document Info Inspector (`Cmd+I`) |
+|:---:|:---:|
+| <img src="docs/screenshots/outline-nested.png" width="460" alt="Nested Outline"> | <img src="docs/screenshots/document-info.png" width="340" alt="Document Info"> |
 
 ### 🔍 Apple Vision OCR On-Demand
 - Integrated Apple Neural Engine text recognition (`VNRecognizeTextRequest`).
-- Extract text directly from scanned documents or embedded images with high accuracy.
-- Native Liquid Glass results sheet displaying recognized characters, text view with selectable font sizes, and one-click "Copy Text" / "Save TXT".
+- Extract text directly from scanned documents or embedded images with high accuracy (`Cmd+Shift+R`).
+- Native Liquid Glass results sheet displaying recognized lines and word count, selectable monospaced text preview, and automatic clipboard copy.
 
 <p align="center">
-  <img src="docs/screenshots/ocr-panel.png" alt="Apple Vision OCR" width="800">
+  <img src="docs/screenshots/ocr-panel.png" alt="Apple Vision OCR" width="680">
 </p>
 
-### ⚡ Spotlight-Style Command Palette (`Cmd+P`)
+### ⚡ Spotlight-Style Command Palette (`Cmd+P` / `Cmd+Shift+P`)
 - Floating, keyboard-first palette with instant auto-focus:
-  - `>` : Command palette mode (toggle sidebar, fit width, zoom, OCR, settings).
+  - `>` : Command palette mode (tabs, sidebars, annotations, zoom, OCR, focus/presentation modes, settings).
   - `/` : Full-text search across the active PDF document.
+  - `//` : Instant full-text search across all indexed PDFs in the current workspace.
+  - `#` : Jump to any section in the active PDF's Table of Contents.
+  - `@` : Jump to any bookmarked page in the active PDF.
   - `p:` or `:` : Direct page jump navigation.
   - *Default* : Fast fuzzy filtering across current workspace files and recent documents.
 
-<p align="center">
-  <img src="docs/screenshots/palette-command.png" alt="Command Palette" width="600">
-</p>
+| Command Mode (`>`) | Workspace Full-Text Search (`//`) |
+|:---:|:---:|
+| <img src="docs/screenshots/palette-command.png" width="410" alt="Command Palette"> | <img src="docs/screenshots/palette-workspace-search.png" width="410" alt="Workspace Search"> |
 
 ### 📁 Workspace Mode & iCloud Drive
 - Open entire folders with recursive background hierarchy loading (`Cmd+Shift+O`).
@@ -104,7 +116,7 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 - Fast background workspace text indexing and real-time status reporting.
 
 ### ⚙️ Native Settings (`Cmd+,`)
-- Dedicated macOS Preferences window organized by tabs: **General**, **Reading**, **Workspace**, and **Advanced**.
+- Dedicated macOS Preferences window organized by tabs: **General**, **Reading**, **Workspace**, **Appearance**, and **Advanced**.
 - Persistent user preferences via `NSUserDefaults`: restore sessions, default zoom/display modes, and privacy settings.
 
 <p align="center">
@@ -119,7 +131,7 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 |:---|:---|
 | `Cmd + O` | Open PDF File |
 | `Cmd + Shift + O` | Open Folder (Workspace Mode) |
-| `Cmd + Shift + H` | Home Screen |
+| `Cmd + Option + H` | Home Screen |
 | `Cmd + S` | Safe Save Document & Annotations |
 | `Cmd + Shift + S` | Save As... |
 | `Cmd + T` | New Document Tab |
@@ -127,7 +139,7 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 | `Cmd + Shift + ]` / `Cmd + Shift + [` | Next / Previous Document Tab |
 | `Cmd + 1` … `Cmd + 8` | Jump to Tab 1–8 (layout-independent, AZERTY-safe) |
 | `Cmd + 9` | Jump to Last Tab |
-| `Cmd + P` | Quick Open |
+| `Cmd + P` | Quick Open / Universal Search |
 | `Cmd + Shift + P` | Command Palette (Prefix `>`) |
 | `Cmd + F` | Search in Current Document |
 | `Cmd + G` / `Cmd + Shift + G` | Find Next / Find Previous |
@@ -136,7 +148,9 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 | `Cmd + [` / `Cmd + ]` | Navigation History: Back / Forward |
 | `Cmd + D` | Bookmark Current Page |
 | `Cmd + I` | Document Info |
+| `Cmd + Shift + H` | Highlight Selection |
 | `Cmd + Shift + U` | Underline Selection |
+| `Cmd + Shift + X` | Strikeout Selection |
 | `Cmd + Shift + N` | Add Note to Selection |
 | `Cmd + Shift + M` | Copy Selection as Markdown Quote |
 | `Cmd + Shift + R` | OCR Current Page (Apple Vision) |
@@ -145,7 +159,7 @@ Grab the latest pre-built app from the **[Releases page](https://github.com/gobe
 | `Cmd + Return` | Toggle Presentation Mode |
 | `Cmd + ,` | Settings / Preferences |
 
-Highlight, Strikeout, Fit Width / Fit Page, display modes and zoom are available from the **Edit** / **View** menus, the toolbar and the command palette.
+Fit Width / Fit Page, display modes, sidebar toggles, and zoom are available from the **View** menu, the toolbar, and the command palette (`Cmd+Shift+P`).
 
 ---
 

@@ -254,9 +254,18 @@ mod tests {
         let test_base = "/tmp/iridecence-real-test";
         let _ = std::fs::create_dir_all(format!("{}/folder_a/sub_a", test_base));
         let _ = std::fs::create_dir_all(format!("{}/folder_b", test_base));
-        let _ = std::fs::write(format!("{}/folder_a/root_sample.pdf", test_base), b"%PDF-1.4 mock");
-        let _ = std::fs::write(format!("{}/folder_a/sub_a/deep_sample.pdf", test_base), b"%PDF-1.4 mock");
-        let _ = std::fs::write(format!("{}/folder_b/other.pdf", test_base), b"%PDF-1.4 mock");
+        let _ = std::fs::write(
+            format!("{}/folder_a/root_sample.pdf", test_base),
+            b"%PDF-1.4 mock",
+        );
+        let _ = std::fs::write(
+            format!("{}/folder_a/sub_a/deep_sample.pdf", test_base),
+            b"%PDF-1.4 mock",
+        );
+        let _ = std::fs::write(
+            format!("{}/folder_b/other.pdf", test_base),
+            b"%PDF-1.4 mock",
+        );
 
         // 1. Open folder_a
         let folder_a = format!("{}/folder_a", test_base);

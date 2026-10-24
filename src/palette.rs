@@ -891,15 +891,21 @@ impl CommandPaletteDelegate {
                     "close_tab",
                 ),
                 (
+                    "Home Screen",
+                    "Return to the Home screen and recent documents",
+                    Some("⌥⌘H"),
+                    "home_screen",
+                ),
+                (
                     "Show Next Tab",
                     "Switch to the next document tab",
-                    Some("⌃Tab"),
+                    Some("⇧⌘]"),
                     "next_tab",
                 ),
                 (
                     "Show Previous Tab",
                     "Switch to the previous document tab",
-                    Some("⌃⇧Tab"),
+                    Some("⇧⌘["),
                     "prev_tab",
                 ),
                 (
@@ -941,13 +947,13 @@ impl CommandPaletteDelegate {
                 (
                     "Fit to Width",
                     "Zoom document to fill view width",
-                    Some("⌘1"),
+                    None,
                     "fit_width",
                 ),
                 (
                     "Fit to Page",
                     "Zoom document to fit entire page",
-                    Some("⌘2"),
+                    None,
                     "fit_page",
                 ),
                 (
@@ -971,25 +977,25 @@ impl CommandPaletteDelegate {
                 (
                     "Copy as Markdown Quote",
                     "Copy selection as blockquote citation",
-                    None,
+                    Some("⇧⌘M"),
                     "copy_markdown_quote",
                 ),
                 (
                     "Search Selection in Document",
                     "Find selected text in current PDF",
-                    None,
+                    Some("⌘E"),
                     "search_selection",
                 ),
                 (
                     "Enter Presentation Mode",
                     "Fullscreen lecture presentation with page controls",
-                    None,
+                    Some("⌘↩"),
                     "toggle_presentation",
                 ),
                 (
                     "Focus Reading Mode",
                     "Windowed reading without sidebars or toolbars",
-                    None,
+                    Some("⇧⌘F"),
                     "toggle_focus",
                 ),
                 (
@@ -1037,7 +1043,7 @@ impl CommandPaletteDelegate {
                 (
                     "OCR Current Page",
                     "Recognize text on current page using Apple Vision OCR",
-                    None,
+                    Some("⇧⌘R"),
                     "ocr_page",
                 ),
                 (
@@ -1613,7 +1619,8 @@ pub fn create_palette(
         scroll.setHidden(true);
 
         let ta_opts: usize = 0x01 | 0x02 | 0x80 | 0x200;
-        let ta_alloc: *mut objc2::runtime::AnyObject = msg_send![objc2::class!(NSTrackingArea), alloc];
+        let ta_alloc: *mut objc2::runtime::AnyObject =
+            msg_send![objc2::class!(NSTrackingArea), alloc];
         let ta: *mut objc2::runtime::AnyObject = msg_send![
             ta_alloc,
             initWithRect: table_view.bounds(),
@@ -1633,7 +1640,9 @@ pub fn create_palette(
             nc.addObserver_selector_name_object(
                 &*delegate,
                 objc2::sel!(tableDidScroll:),
-                Some(objc2_foundation::ns_string!("NSViewBoundsDidChangeNotification")),
+                Some(objc2_foundation::ns_string!(
+                    "NSViewBoundsDidChangeNotification"
+                )),
                 Some(&clip),
             );
         }
