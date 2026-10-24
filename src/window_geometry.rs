@@ -72,7 +72,7 @@ impl WindowGeometry {
         let desired_min: f64 = match kind {
             WindowKind::Home => 480.0,
             WindowKind::Reader => 520.0,
-            WindowKind::Palette => 72.0,
+            WindowKind::Palette => 48.0,
             WindowKind::DebugConsole => 360.0,
             WindowKind::Utility => 300.0,
         };
@@ -99,7 +99,7 @@ impl WindowGeometry {
             }
             WindowKind::Palette => {
                 let w = (620.0f64).min(vis.size.width * 0.65);
-                (w, 72.0)
+                (w, 48.0)
             }
             WindowKind::DebugConsole => {
                 let w = (720.0f64).min(vis.size.width * 0.72);
@@ -291,15 +291,26 @@ mod tests {
             assert!(min_h <= max_h, "min_h must be <= max_h for {:?}", kind);
 
             let (def_w, def_h) = WindowGeometry::default_size(vis, kind);
-            assert!(def_w >= min_w && def_w <= max_w, "default width in bounds for {:?}", kind);
-            assert!(def_h >= min_h && def_h <= max_h, "default height in bounds for {:?}", kind);
+            assert!(
+                def_w >= min_w && def_w <= max_w,
+                "default width in bounds for {:?}",
+                kind
+            );
+            assert!(
+                def_h >= min_h && def_h <= max_h,
+                "default height in bounds for {:?}",
+                kind
+            );
         }
     }
 
     #[test]
     fn test_window_geometry_sanitize_nan_and_inf() {
         let vis = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1440.0, 900.0));
-        let bad_frame = NSRect::new(NSPoint::new(f64::NAN, 100.0), NSSize::new(800.0, f64::INFINITY));
+        let bad_frame = NSRect::new(
+            NSPoint::new(f64::NAN, 100.0),
+            NSSize::new(800.0, f64::INFINITY),
+        );
         let sanitized = WindowGeometry::sanitize_frame(bad_frame, vis, WindowKind::Reader);
 
         assert!(sanitized.origin.x.is_finite());
@@ -319,7 +330,8 @@ mod tests {
         assert!(sanitized.origin.x >= vis.origin.x);
         assert!(sanitized.origin.x + sanitized.size.width <= vis.origin.x + vis.size.width + 0.01);
         assert!(sanitized.origin.y >= vis.origin.y);
-        assert!(sanitized.origin.y + sanitized.size.height <= vis.origin.y + vis.size.height + 0.01);
+        assert!(
+            sanitized.origin.y + sanitized.size.height <= vis.origin.y + vis.size.height + 0.01
+        );
     }
 }
-

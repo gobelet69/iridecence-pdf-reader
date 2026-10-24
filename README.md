@@ -10,9 +10,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/gobelet69/iridecence-pdf-reader/releases/latest"><img src="https://img.shields.io/badge/release-v0.5.0-purple" alt="Release v0.5.0"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014.0%2B-blue?logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/language-Rust%202024-orange?logo=rust" alt="Rust 2024">
   <img src="https://img.shields.io/badge/ui-Native%20AppKit%20%2B%20PDFKit-black" alt="AppKit & PDFKit">
+  <img src="https://img.shields.io/badge/tests-33%20passing-brightgreen" alt="33 tests passing">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
 </p>
 
@@ -24,13 +26,28 @@
 
 ---
 
+## Download
+
+Grab the latest pre-built app from the **[Releases page](https://github.com/gobelet69/iridecence-pdf-reader/releases/latest)**:
+
+1. Download `Iridecence-PDF-Reader-vX.Y.Z-macOS-arm64.zip` and unzip it.
+2. Move **Iridecence PDF Reader.app** to `/Applications`.
+3. The build is not notarized yet. On first launch, right-click the app → **Open**, or run:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Iridecence PDF Reader.app"
+   ```
+
+---
+
 ## Key Features
 
 ### 🪟 Native Liquid Glass Design
-- Translucent sidebar materials (`NSVisualEffectView` HUD/BehindWindow) that blend naturally with macOS Sonoma and Sequoia.
-- Pixel-perfect typography and native split view dividers with persistent panel layouts.
+- Fully translucent window (`NSVisualEffectView` `BehindWindow` / `UnderWindowBackground`) that lets the desktop shine through the home screen, sidebars and document chrome.
+- Custom `GlassTableRowView` selection: soft accent-tinted rounded capsules instead of opaque AppKit highlight blocks, with a single-row hover coordinator (no stale hover while scrolling).
+- Modern AppKit Source List / Inset table styles, semantic dynamic colors and native empty states for bookmarks and annotations.
+- Pixel-perfect typography and native split view dividers with persistent panel layouts, respecting the traffic-light safe area.
 - Dynamic responsive window geometry tailored for 13-inch MacBook Air displays through 6K Pro Display XDR screens.
-- Automatic or manual Dark Mode and Light Mode switching (`Cmd+Shift+D`).
+- Automatic Dark Mode and Light Mode adaptation following the system appearance.
 
 | Home Screen (Light) | Home Screen (Dark) |
 |:---:|:---:|
@@ -40,21 +57,26 @@
 - Safari/Finder-inspired top tab bar (`Cmd+T`, `Cmd+W`).
 - Isolated document sessions per tab: individual reading positions, zoom scales, undo histories, and dirty annotation states.
 - Clean transitions: opening the first PDF transitions from Home to Document mode; closing the final tab gracefully returns to the Home screen.
-- Keyboard navigation: `Cmd+Shift+]` / `Ctrl+Tab` for Next Tab, `Cmd+Shift+[` / `Ctrl+Shift+Tab` for Previous Tab.
+- Keyboard navigation: `Cmd+Shift+]` / `Cmd+Shift+[` for Next / Previous Tab, `Cmd+1…8` to jump to a tab and `Cmd+9` for the last tab. Shortcuts use physical key codes, so they work on **AZERTY** and other non-QWERTY layouts.
+- Reliable click targets: the tab bar always sits above the document view, so tab switching never misses a click.
 
 <p align="center">
   <img src="docs/screenshots/tabs.png" alt="Multi-Document Tabs" width="800">
 </p>
 
 ### 🖊️ Annotations & Safe Atomic Saving
-- Native PDFKit annotations: **Highlight**, **Underline**, **Strikeout**, and **Text Notes / Comments**.
+- Native PDFKit annotations: **Highlight**, **Underline**, **Strikeout**, and **Text Notes / Comments**. Markup is applied line by line, so selections spanning several lines are fully covered.
 - Direct context menu integration on text selection: Copy, Copy with Page Reference, Copy as Markdown Quote, Search Selection, and Annotate.
-- Safe atomic persistence (`Cmd+S`, `Cmd+Shift+S`): Writes to a temporary file, verifies integrity, and atomically renames.
+- Safe atomic persistence (`Cmd+S`, `Cmd+Shift+S`): Writes to a temporary file, verifies integrity, and atomically renames. Saving always targets the active tab's real file; "Save As…" updates the tab, window title, recents and bookmarks to the new path.
 - **Protected Directory Guard**: Strictly blocks write operations to configured read-only repositories (e.g. `MASTER`), prompting for "Save As..." instead.
 
 <p align="center">
   <img src="docs/screenshots/annotations.png" alt="Native Annotations" width="800">
 </p>
+
+### 🔖 Bookmarks & Document Info
+- Toggle a page bookmark with `Cmd+D`. Bookmarks and annotations are listed together in the sidebar inspector (with page numbers and type icons); clicking an entry jumps to its page. Native empty states are shown when there is nothing to list.
+- `Cmd+I` opens a Document Info inspector for the **active** tab: file name, location, file size, page count, page size and PDF format.
 
 ### 🔍 Apple Vision OCR On-Demand
 - Integrated Apple Neural Engine text recognition (`VNRecognizeTextRequest`).
@@ -97,44 +119,48 @@
 |:---|:---|
 | `Cmd + O` | Open PDF File |
 | `Cmd + Shift + O` | Open Folder (Workspace Mode) |
+| `Cmd + Shift + H` | Home Screen |
 | `Cmd + S` | Safe Save Document & Annotations |
 | `Cmd + Shift + S` | Save As... |
 | `Cmd + T` | New Document Tab |
 | `Cmd + W` | Close Active Tab / Return to Home |
-| `Cmd + Shift + ]` | Next Document Tab |
-| `Cmd + Shift + [` | Previous Document Tab |
-| `Cmd + P` | Quick Open / Command Palette |
+| `Cmd + Shift + ]` / `Cmd + Shift + [` | Next / Previous Document Tab |
+| `Cmd + 1` … `Cmd + 8` | Jump to Tab 1–8 (layout-independent, AZERTY-safe) |
+| `Cmd + 9` | Jump to Last Tab |
+| `Cmd + P` | Quick Open |
 | `Cmd + Shift + P` | Command Palette (Prefix `>`) |
 | `Cmd + F` | Search in Current Document |
+| `Cmd + G` / `Cmd + Shift + G` | Find Next / Find Previous |
+| `Cmd + E` | Search Selection in Document |
 | `Cmd + L` | Go to Page |
-| `Cmd + [` | Navigation History: Back |
-| `Cmd + ]` | Navigation History: Forward |
-| `Cmd + 1` | Sidebar: Pages (Thumbnails) |
-| `Cmd + 2` | Sidebar: Document Outline |
-| `Cmd + 3` | Sidebar: Full-Text Search |
-| `Cmd + 4` | Sidebar: Bookmarks & Annotations |
-| `Cmd + +` / `Cmd + -` | Zoom In / Zoom Out |
+| `Cmd + [` / `Cmd + ]` | Navigation History: Back / Forward |
+| `Cmd + D` | Bookmark Current Page |
+| `Cmd + I` | Document Info |
+| `Cmd + Shift + U` | Underline Selection |
+| `Cmd + Shift + N` | Add Note to Selection |
+| `Cmd + Shift + M` | Copy Selection as Markdown Quote |
+| `Cmd + Shift + R` | OCR Current Page (Apple Vision) |
 | `Cmd + 0` | Actual Size (100%) |
-| `Cmd + 9` | Fit to Window |
-| `Cmd + Option + F` | Toggle Zen / Focus Mode |
-| `Cmd + Option + P` | Toggle Presentation Mode |
-| `Cmd + Shift + D` | Toggle Dark / Light Appearance |
+| `Cmd + Shift + F` | Toggle Focus Reading Mode |
+| `Cmd + Return` | Toggle Presentation Mode |
 | `Cmd + ,` | Settings / Preferences |
+
+Highlight, Strikeout, Fit Width / Fit Page, display modes and zoom are available from the **Edit** / **View** menus, the toolbar and the command palette.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- macOS 14.0 (Sonoma) or macOS 15.0 (Sequoia) recommended.
-- [Rust](https://rustup.rs/) (1.80+ or latest stable).
+- macOS 14.0 (Sonoma) or later — developed and tested on macOS 27 with Apple Silicon.
+- [Rust](https://rustup.rs/) (1.85+ for the 2024 edition, or latest stable).
 - Apple Xcode Command Line Tools (`xcode-select --install`).
 
 ### Build & Run
 
 Clone the repository:
 ```bash
-git clone https://github.com/theodeville/iridecence-pdf-reader.git
+git clone https://github.com/gobelet69/iridecence-pdf-reader.git
 cd iridecence-pdf-reader
 ```
 
@@ -149,21 +175,39 @@ To build the self-contained macOS `.app` bundle:
 open "Iridecence PDF Reader.app"
 ```
 
+> [!TIP]
+> If the repository lives in an iCloud Drive–synced folder (e.g. `~/Documents`), `build_app.sh` compiles into `/tmp/target` to avoid iCloud locking the `target/` directory.
+
+### Testing & Verification
+
+```bash
+cargo test              # 33 unit & regression tests
+./scripts/verify.sh     # cargo check + cargo test + app bundle build
+./scripts/visual_qa.sh  # automated screenshot capture of every UI state
+```
+
+The suite covers adversarial index payloads (corrupt/truncated/oversized), symlink-cycle traversal, tab lifecycle and keycode-based tab switching, bounded log memory, single-row hover invariants, and bookmark path migration. See [docs/testing.md](docs/testing.md) and [docs/qa/](docs/qa/) for details.
+
 ---
 
 ## Architecture & Design
 
 Iridecence is structured around an event-driven Cocoa runloop paired with Rust concurrency primitives:
 
-- **[`src/main.rs`](src/main.rs)**: AppKit application lifecycle, `NSApplicationDelegate`, window controller, toolbar coordination.
+- **[`src/main.rs`](src/main.rs)**: AppKit application lifecycle, `NSApplicationDelegate`, window controller, menus, toolbar coordination.
 - **[`src/tabs.rs`](src/tabs.rs)**: Multi-document session manager, tab view controller, and isolated per-tab document state.
 - **[`src/annotations.rs`](src/annotations.rs)**: Native PDFKit annotation mutations, safe atomic file serialization, and read-only protection guards.
+- **[`src/bookmarks.rs`](src/bookmarks.rs)** / **[`src/bookmarks_view.rs`](src/bookmarks_view.rs)**: Persistent per-document bookmarks with path migration, and the bookmarks & annotations inspector.
+- **[`src/glass_row.rs`](src/glass_row.rs)**: `GlassTableRowView` translucent selection capsules and the single-row `HoverCoordinator`.
+- **[`src/empty_state.rs`](src/empty_state.rs)**: Reusable native empty-state views for sidebars and inspectors.
+- **[`src/home_screen.rs`](src/home_screen.rs)**: Home screen with recents, filtering and quick actions.
 - **[`src/ocr.rs`](src/ocr.rs)**: Integration with Apple's `VNRecognizeTextRequest` and background thread image dispatch.
 - **[`src/palette.rs`](src/palette.rs)**: Spotlight-style floating `NSPanel` with prefix-based command and fuzzy search routing.
-- **[`src/workspace_index.rs`](src/workspace_index.rs)**: Background thread file crawler, PDF text extractor, and fast binary cache.
+- **[`src/workspace_index.rs`](src/workspace_index.rs)**: Background thread file crawler, PDF text extractor, and hardened binary cache.
 - **[`src/settings.rs`](src/settings.rs)**: Tabbed native preferences window backed by `NSUserDefaults`.
+- **[`src/logger.rs`](src/logger.rs)** / **[`src/debug_console.rs`](src/debug_console.rs)**: Bounded in-memory logging and the live debug console.
 
-For in-depth architectural diagrams and memory ownership models, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For in-depth architectural diagrams and memory ownership models, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). UI rules for the Liquid Glass design system live in [docs/ui-design.md](docs/ui-design.md).
 
 ---
 
@@ -174,7 +218,7 @@ Measurable baselines verified on Apple Silicon (M-series):
 - **Small PDF Open (<5 MB)**: <15 ms
 - **Large PDF Open (>100 MB)**: <65 ms (streaming page load)
 - **Base Memory Footprint**: ~48 MB RAM
-- **Binary Size**: ~8.4 MB (unstripped debug), ~3.2 MB (stripped release)
+- **Binary Size**: ~1.9 MB (release build, Apple Silicon arm64)
 
 Detailed benchmark procedures and profiling methodologies are documented in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 

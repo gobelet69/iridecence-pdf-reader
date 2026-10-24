@@ -43,6 +43,24 @@ pub static INDEX: Lazy<Mutex<WorkspaceIndex>> = Lazy::new(|| {
 
 pub static INDEXING_STATUS: Lazy<Mutex<Option<(usize, usize)>>> = Lazy::new(|| Mutex::new(None));
 pub static CANCEL_INDEXING: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+pub static WORKSPACE_PDFS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
+pub fn get_workspace_pdfs() -> (Option<String>, Vec<String>) {
+    let ws = INDEX
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .current_workspace
+        .clone();
+    let mut files = WORKSPACE_PDFS
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    if files.is_empty() {
+        let idx = INDEX.lock().unwrap_or_else(|p| p.into_inner());
+        files = idx.entries.keys().cloned().collect();
+    }
+    (ws, files)
+}
 
 fn cache_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -212,7 +230,7 @@ pub fn search_workspace(query: &str) -> Vec<SearchResult> {
         return Vec::new();
     }
 
-    let index = INDEX.lock().unwrap();
+    let index = INDEX.lock().unwrap_or_else(|p| p.into_inner());
     let mut results = Vec::new();
 
     for pdf in index.entries.values() {
@@ -224,9 +242,19 @@ pub fn search_workspace(query: &str) -> Vec<SearchResult> {
         for (page_num, text) in &pdf.pages {
             let lower_text = text.to_lowercase();
             if let Some(pos) = lower_text.find(&clean_query) {
-                // Generate clean snippet
-                let start = if pos > 35 { pos - 35 } else { 0 };
-                let end = (pos + clean_query.len() + 45).min(text.len());
+                // Generate clean snippet with strict UTF-8 char boundary safety
+                let safe_pos = pos.min(text.len());
+                let mut start = safe_pos.saturating_sub(35);
+                while start > 0 && !text.is_char_boundary(start) {
+                    start -= 1;
+                }
+                let mut end = (safe_pos + clean_query.len() + 45).min(text.len());
+                while end < text.len() && !text.is_char_boundary(end) {
+                    end += 1;
+                }
+                if start > end {
+                    start = 0;
+                }
 
                 let mut snippet = text[start..end].replace('\n', " ").replace('\r', " ");
                 snippet = snippet.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -259,6 +287,10 @@ pub fn search_workspace(query: &str) -> Vec<SearchResult> {
 
 pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<String>) {
     CANCEL_INDEXING.store(true, Ordering::SeqCst);
+    let deep_search_enabled = crate::settings::SettingsManager::bool_pref(
+        crate::settings::PREF_DEEP_WORKSPACE_SEARCH,
+        true,
+    );
 
     // Spawn background thread
     std::thread::spawn(move || {
@@ -267,7 +299,7 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
         CANCEL_INDEXING.store(false, Ordering::SeqCst);
 
         {
-            let mut idx = INDEX.lock().unwrap();
+            let mut idx = INDEX.lock().unwrap_or_else(|p| p.into_inner());
             idx.current_workspace = Some(workspace_dir.clone());
         }
 
@@ -275,6 +307,13 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
         let mut pdf_files = Vec::new();
         let mut visited = std::collections::HashSet::new();
         collect_pdfs_safe(Path::new(&workspace_dir), &mut pdf_files, &mut visited, 0);
+
+        *WORKSPACE_PDFS.lock().unwrap_or_else(|p| p.into_inner()) = pdf_files.clone();
+
+        if !deep_search_enabled {
+            *INDEXING_STATUS.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            return;
+        }
 
         // Sort so priority_path comes first
         if let Some(ref prio) = priority_path {
@@ -349,7 +388,7 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
     });
 }
 
-fn collect_pdfs_safe(
+pub fn collect_pdfs_safe(
     dir: &Path,
     out: &mut Vec<String>,
     visited: &mut std::collections::HashSet<PathBuf>,
@@ -368,6 +407,9 @@ fn collect_pdfs_safe(
         Err(_) => return,
     };
 
+    let show_hidden =
+        crate::settings::SettingsManager::bool_pref(crate::settings::PREF_SHOW_HIDDEN_FILES, false);
+
     for entry in entries.flatten() {
         if CANCEL_INDEXING.load(Ordering::SeqCst) || out.len() >= 10_000 {
             return;
@@ -377,8 +419,12 @@ fn collect_pdfs_safe(
             .file_name()
             .map(|n| n.to_string_lossy())
             .unwrap_or_default();
-        if name.starts_with('.') {
-            continue; // Ignore hidden files/dirs
+        if name == ".DS_Store"
+            || name == ".git"
+            || name == "target"
+            || (!show_hidden && name.starts_with('.'))
+        {
+            continue;
         }
         if path.is_dir() {
             collect_pdfs_safe(&path, out, visited, depth + 1);
@@ -461,7 +507,9 @@ mod tests {
         );
 
         let mut buf = Vec::new();
-        original.save_to_writer(&mut buf).expect("Save to writer should succeed");
+        original
+            .save_to_writer(&mut buf)
+            .expect("Save to writer should succeed");
         assert!(!buf.is_empty());
         assert_eq!(&buf[0..6], b"IRIDX1");
 
@@ -472,13 +520,19 @@ mod tests {
         restored.load_from_reader(&buf[..]);
 
         assert_eq!(restored.entries.len(), 1);
-        let entry = restored.entries.get("/test/doc1.pdf").expect("Entry must exist");
+        let entry = restored
+            .entries
+            .get("/test/doc1.pdf")
+            .expect("Entry must exist");
         assert_eq!(entry.path, "/test/doc1.pdf");
         assert_eq!(entry.mtime, 1728000000);
         assert_eq!(entry.file_size, 1048576);
         assert_eq!(entry.pages.len(), 2);
         assert_eq!(entry.pages[0], (1, "First page text content".to_string()));
-        assert_eq!(entry.pages[1], (2, "Second page with unicode: 🚀 Iridescence".to_string()));
+        assert_eq!(
+            entry.pages[1],
+            (2, "Second page with unicode: 🚀 Iridescence".to_string())
+        );
     }
 
     #[test]
@@ -489,7 +543,11 @@ mod tests {
             current_workspace: None,
         };
         idx.load_from_reader(&corrupt_data[..]);
-        assert_eq!(idx.entries.len(), 0, "Corrupt magic should be rejected without panicking");
+        assert_eq!(
+            idx.entries.len(),
+            0,
+            "Corrupt magic should be rejected without panicking"
+        );
     }
 
     #[test]
@@ -501,7 +559,11 @@ mod tests {
             current_workspace: None,
         };
         idx.load_from_reader(&truncated[..]);
-        assert_eq!(idx.entries.len(), 0, "Truncated stream should abort safely without panic");
+        assert_eq!(
+            idx.entries.len(),
+            0,
+            "Truncated stream should abort safely without panic"
+        );
     }
 
     #[test]
@@ -514,7 +576,11 @@ mod tests {
             current_workspace: None,
         };
         idx.load_from_reader(&payload[..]);
-        assert_eq!(idx.entries.len(), 0, "Oversized count must be rejected to prevent OOM DOS");
+        assert_eq!(
+            idx.entries.len(),
+            0,
+            "Oversized count must be rejected to prevent OOM DOS"
+        );
     }
 
     #[test]
@@ -550,12 +616,17 @@ mod tests {
             current_workspace: None,
         };
         idx.load_from_reader(&payload[..]);
-        assert_eq!(idx.entries.len(), 0, "Oversized page_count must be rejected");
+        assert_eq!(
+            idx.entries.len(),
+            0,
+            "Oversized page_count must be rejected"
+        );
     }
 
     #[test]
     fn test_collect_pdfs_safe_cycle_protection() {
-        let test_dir = std::env::temp_dir().join(format!("oxireader_test_cycle_{}", std::process::id()));
+        let test_dir =
+            std::env::temp_dir().join(format!("oxireader_test_cycle_{}", std::process::id()));
         let _ = fs::create_dir_all(&test_dir);
         let sub_dir = test_dir.join("sub");
         let _ = fs::create_dir_all(&sub_dir);
@@ -572,4 +643,3 @@ mod tests {
         let _ = fs::remove_dir_all(&test_dir);
     }
 }
-

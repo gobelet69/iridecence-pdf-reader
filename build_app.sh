@@ -1,15 +1,23 @@
 #!/bin/bash
 set -e
 
-echo "Building release binary..."
-CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build
+PROFILE="${PROFILE:-release}"
+if [ "$PROFILE" = "release" ]; then
+    echo "Building release binary..."
+    CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build --release
+    BIN_PATH="/tmp/target/release/oxireader"
+else
+    echo "Building debug binary..."
+    CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build
+    BIN_PATH="/tmp/target/debug/oxireader"
+fi
 
 echo "Creating App Bundle structure..."
 mkdir -p "Iridecence PDF Reader.app/Contents/MacOS"
 mkdir -p "Iridecence PDF Reader.app/Contents/Resources"
 
-echo "Copying binary..."
-cp /tmp/target/debug/oxireader "Iridecence PDF Reader.app/Contents/MacOS/"
+echo "Copying binary ($BIN_PATH)..."
+cp "$BIN_PATH" "Iridecence PDF Reader.app/Contents/MacOS/oxireader"
 
 echo "Copying icon..."
 cp AppIcon.icns "Iridecence PDF Reader.app/Contents/Resources/"
@@ -26,14 +34,22 @@ cat > "Iridecence PDF Reader.app/Contents/Info.plist" << 'PLIST'
     <string>com.iridecence.pdfreader</string>
     <key>CFBundleName</key>
     <string>Iridecence PDF Reader</string>
+    <key>CFBundleDisplayName</key>
+    <string>Iridecence PDF Reader</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.5.0</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>5</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
-    <string>10.15</string>
+    <string>11.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
@@ -53,6 +69,8 @@ cat > "Iridecence PDF Reader.app/Contents/Info.plist" << 'PLIST'
             <string>Folder</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
             <key>LSItemContentTypes</key>
             <array>
                 <string>public.folder</string>

@@ -5,6 +5,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.5.0] - 2026-10-24
+
+### Added
+- **Liquid Glass UI polish**: fully translucent window (`BehindWindow` / `UnderWindowBackground`), custom `GlassTableRowView` accent capsules for row selection (`src/glass_row.rs`), modern Source List / Inset table styles.
+- **Native empty states** (`src/empty_state.rs`) for the bookmarks and annotations inspectors.
+- **Single-row `HoverCoordinator`** guaranteeing at most one hovered row in lists while scrolling.
+- **Reliability & QA tooling**: hardened workspace index decoder (corrupt / truncated / oversized payload rejection), symlink-cycle–safe folder traversal, bounded log buffer, live debug console, `scripts/verify.sh` and `scripts/visual_qa.sh`.
+- Test suite grown to **33 unit & regression tests**.
+
+### Fixed
+- Home screen action button spacing and stale hover highlights (Home, Workspace, Command Palette).
+- Current-page indicator in the thumbnail sidebar.
+- Bookmark / annotation empty-state layout and broken bookmark actions.
+- Workspace sidebar overlapping the traffic-light buttons; truncation in deeply nested folders.
+- White corners around the Command Palette.
+- Highlight / underline / strikeout covering only the first line of multi-line selections.
+- `Cmd+1…9` tab switching on AZERTY and other non-QWERTY layouts (now uses physical key codes).
+- `Cmd+I` showing the wrong document identity / path.
+- Save writing to the wrong (or no) destination; "Save As…" now migrates tab, title, recents and bookmarks.
+- Intermittent missed clicks when switching tabs.
+
+### Changed
+- App version bumped to 0.5.0 (`Cargo.toml`, `Info.plist`).
+
+---
+
 ## [0.4.0] - 2026-10-12
 
 ### Added

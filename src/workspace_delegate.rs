@@ -4,11 +4,11 @@ use objc2::rc::Weak;
 use objc2::runtime::AnyObject;
 use objc2::{DefinedClass, MainThreadOnly, Message, define_class};
 use objc2_app_kit::{
-    NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
+    NSLayoutConstraint, NSOutlineView, NSResponder, NSTableCellView, NSTableColumn, NSTextField,
     NSUserInterfaceItemIdentification, NSView,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSInteger, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+    MainThreadMarker, NSArray, NSInteger, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
 };
 use std::cell::RefCell;
 
@@ -18,6 +18,7 @@ pub struct WorkspaceDelegateIvars {
     pub outline_view: RefCell<Option<Weak<NSOutlineView>>>,
     pub folder_image: RefCell<Option<Retained<objc2_app_kit::NSImage>>>,
     pub doc_image: RefCell<Option<Retained<objc2_app_kit::NSImage>>>,
+    pub hover_coordinator: crate::glass_row::HoverCoordinator,
 }
 
 define_class!(
@@ -37,7 +38,7 @@ define_class!(
     fn nodeDidLoadChildren(&self, notification: &objc2_foundation::NSNotification) {
         if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
             if let Some(outline_view) = weak_view.load() {
-                let node: Option<objc2::rc::Retained<crate::workspace::FileNode>> = unsafe { objc2::msg_send_id![notification, object] };
+                let node: Option<objc2::rc::Retained<crate::workspace::FileNode>> = unsafe { objc2::msg_send![notification, object] };
                 let Some(node) = node else { return; };
                 let mut is_root = false;
                 if let Some(root) = self.ivars().root_node.borrow().as_ref() {
@@ -47,7 +48,7 @@ define_class!(
                 }
 
                 if is_root {
-                    unsafe { outline_view.reloadItem_reloadChildren(None, true) };
+                    unsafe { outline_view.reloadData() };
                 } else {
                     let node_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(node) };
                     unsafe { outline_view.reloadItem_reloadChildren(Some(&node_any), true) };
@@ -57,9 +58,36 @@ define_class!(
         }
     }
 
+    #[unsafe(method(outlineDidScroll:))]
+    fn outline_did_scroll(&self, _notification: &objc2_foundation::NSNotification) {
+        if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
+            if let Some(outline_view) = weak_view.load() {
+                self.ivars().hover_coordinator.update_hover(&outline_view);
+            }
+        }
+    }
+
+    #[unsafe(method(mouseMoved:))]
+    fn mouse_moved(&self, _event: &objc2_app_kit::NSEvent) {
+        if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
+            if let Some(outline_view) = weak_view.load() {
+                self.ivars().hover_coordinator.update_hover(&outline_view);
+            }
+        }
+    }
+
+    #[unsafe(method(mouseExited:))]
+    fn mouse_exited(&self, _event: &objc2_app_kit::NSEvent) {
+        if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
+            if let Some(outline_view) = weak_view.load() {
+                self.ivars().hover_coordinator.clear_hover(&outline_view);
+            }
+        }
+    }
+
     #[unsafe(method(outlineViewSelectionDidChange:))]
     fn outlineViewSelectionDidChange(&self, notification: &objc2_foundation::NSNotification) {
-        let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send_id![notification, object] };
+        let outline_view: Option<objc2::rc::Retained<NSOutlineView>> = unsafe { objc2::msg_send![notification, object] };
         let Some(outline_view) = outline_view else { return; };
         let selected_row = unsafe { outline_view.selectedRow() };
         if selected_row >= 0 {
@@ -71,7 +99,7 @@ define_class!(
             }
         }
 
-        let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send_id![&outline_view, target] };
+        let target: Option<objc2::rc::Retained<objc2::runtime::AnyObject>> = unsafe { objc2::msg_send![&outline_view, target] };
         if let Some(target) = target {
             let _: () = unsafe { objc2::msg_send![&target, workspaceSelectionChanged: &*outline_view] };
         }
@@ -127,6 +155,18 @@ define_class!(
             node.ivars().is_dir.get()
         }
 
+        #[unsafe(method(outlineView:rowViewForItem:))]
+        fn outlineView_rowViewForItem(&self, outline_view: &NSOutlineView, item: &AnyObject) -> *mut objc2_app_kit::NSTableRowView {
+            let mtm = MainThreadMarker::from(self);
+            let row = unsafe { outline_view.rowForItem(Some(item)) };
+            let view = crate::glass_row::GlassTableRowView::new(mtm);
+            if self.ivars().hover_coordinator.hovered_row() == Some(row) {
+                view.set_hovered(true);
+            }
+            let row_view = unsafe { Retained::cast_unchecked::<objc2_app_kit::NSTableRowView>(view) };
+            Retained::autorelease_ptr(row_view)
+        }
+
         #[unsafe(method(outlineView:viewForTableColumn:item:))]
         fn outlineView_viewForTableColumn_item(&self, outline_view: &NSOutlineView, _table_column: Option<&NSTableColumn>, item: &AnyObject) -> *mut NSView {
             let node: &FileNode = unsafe { &*(item as *const AnyObject as *const FileNode) };
@@ -135,12 +175,33 @@ define_class!(
             let id = objc2_foundation::ns_string!("FileCell");
             let mut view = unsafe { outline_view.makeViewWithIdentifier_owner(id, None) };
             if view.is_none() {
-                let cell = unsafe { NSTableCellView::initWithFrame(NSTableCellView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 24.0))) };
+                let cell = unsafe { NSTableCellView::initWithFrame(NSTableCellView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 28.0))) };
                 unsafe { cell.setIdentifier(Some(id)) };
 
-                let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(2.0, 4.0), NSSize::new(16.0, 16.0))) };
-                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(24.0, 3.0), NSSize::new(156.0, 18.0))) };
+                let image_view = unsafe { objc2_app_kit::NSImageView::initWithFrame(objc2_app_kit::NSImageView::alloc(mtm), NSRect::new(NSPoint::new(2.0, 6.0), NSSize::new(16.0, 16.0))) };
+                let text_field = unsafe { NSTextField::initWithFrame(NSTextField::alloc(mtm), NSRect::new(NSPoint::new(22.0, 4.0), NSSize::new(140.0, 20.0))) };
+                let cloud_iv = objc2_app_kit::NSImageView::initWithFrame(
+                    objc2_app_kit::NSImageView::alloc(mtm),
+                    NSRect::new(NSPoint::new(180.0, 6.0), NSSize::new(16.0, 16.0)),
+                );
+                cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon")));
+                cloud_iv.setHidden(true);
+
+                let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(
+                    objc2_app_kit::NSProgressIndicator::alloc(mtm),
+                    NSRect::new(NSPoint::new(162.0, 6.0), NSSize::new(14.0, 14.0)),
+                );
+                progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress")));
+                progress.setHidden(true);
+                progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
+                progress.setControlSize(objc2_app_kit::NSControlSize::Small);
+
                 unsafe {
+                    image_view.setTranslatesAutoresizingMaskIntoConstraints(false);
+                    text_field.setTranslatesAutoresizingMaskIntoConstraints(false);
+                    cloud_iv.setTranslatesAutoresizingMaskIntoConstraints(false);
+                    progress.setTranslatesAutoresizingMaskIntoConstraints(false);
+
                     text_field.setBezeled(false);
                     text_field.setDrawsBackground(false);
                     text_field.setEditable(false);
@@ -149,37 +210,38 @@ define_class!(
                     let font = objc2_app_kit::NSFont::systemFontOfSize(13.0);
                     text_field.setFont(Some(&font));
                     text_field.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingMiddle);
-                    text_field.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
 
                     cell.addSubview(&image_view);
                     cell.addSubview(&text_field);
+                    cell.addSubview(&cloud_iv);
+                    cell.addSubview(&progress);
                     cell.setImageView(Some(&image_view));
                     cell.setTextField(Some(&text_field));
 
-                    let cloud_iv = unsafe { objc2_app_kit::NSButton::initWithFrame(objc2_app_kit::NSButton::alloc(mtm), NSRect::new(NSPoint::new(180.0, 4.0), NSSize::new(16.0, 16.0))) };
-                    unsafe {
-                        cloud_iv.setIdentifier(Some(objc2_foundation::ns_string!("CloudIcon")));
-                        cloud_iv.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin);
-                        cloud_iv.setHidden(true);
-                        cloud_iv.setBezelStyle(objc2_app_kit::NSBezelStyle::Inline);
-                        cloud_iv.setBordered(false);
-                        cloud_iv.setTitle(objc2_foundation::ns_string!(""));
-                        cloud_iv.setImagePosition(objc2_app_kit::NSCellImagePosition::ImageOnly);
+                    let tf_trailing = text_field.trailingAnchor().constraintEqualToAnchor_constant(&cell.trailingAnchor(), -4.0);
+                    tf_trailing.setIdentifier(Some(objc2_foundation::ns_string!("TfTrailing")));
 
-                        let target: &objc2::runtime::AnyObject = &*(self as *const WorkspaceDelegate as *const objc2::runtime::AnyObject);
-                        cloud_iv.setTarget(Some(target));
-                        cloud_iv.setAction(Some(objc2::sel!(downloadItem:)));
-                    }
+                    NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
+                        &*image_view.leadingAnchor().constraintEqualToAnchor_constant(&cell.leadingAnchor(), 2.0),
+                        &*image_view.centerYAnchor().constraintEqualToAnchor(&cell.centerYAnchor()),
+                        &*image_view.widthAnchor().constraintEqualToConstant(16.0),
+                        &*image_view.heightAnchor().constraintEqualToConstant(16.0),
 
-                    let progress = objc2_app_kit::NSProgressIndicator::initWithFrame(objc2_app_kit::NSProgressIndicator::alloc(mtm), NSRect::new(NSPoint::new(180.0, 4.0), NSSize::new(16.0, 16.0)));
-                    unsafe { progress.setIdentifier(Some(objc2_foundation::ns_string!("DownloadProgress"))) };
-                    progress.setHidden(true);
-                    progress.setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewMinXMargin);
-                    progress.setStyle(objc2_app_kit::NSProgressIndicatorStyle::Spinning);
-                    progress.setControlSize(objc2_app_kit::NSControlSize::Small);
+                        &*text_field.leadingAnchor().constraintEqualToAnchor_constant(&image_view.trailingAnchor(), 5.0),
+                        &*text_field.centerYAnchor().constraintEqualToAnchor(&cell.centerYAnchor()),
+                        &*tf_trailing,
+                        &*text_field.widthAnchor().constraintGreaterThanOrEqualToConstant(30.0),
 
-                    cell.addSubview(&cloud_iv);
-                    cell.addSubview(&progress);
+                        &*cloud_iv.trailingAnchor().constraintEqualToAnchor_constant(&cell.trailingAnchor(), -4.0),
+                        &*cloud_iv.centerYAnchor().constraintEqualToAnchor(&cell.centerYAnchor()),
+                        &*cloud_iv.widthAnchor().constraintEqualToConstant(16.0),
+                        &*cloud_iv.heightAnchor().constraintEqualToConstant(16.0),
+
+                        &*progress.trailingAnchor().constraintEqualToAnchor_constant(&cloud_iv.leadingAnchor(), -4.0),
+                        &*progress.centerYAnchor().constraintEqualToAnchor(&cell.centerYAnchor()),
+                        &*progress.widthAnchor().constraintEqualToConstant(14.0),
+                        &*progress.heightAnchor().constraintEqualToConstant(14.0),
+                    ]));
                 }
                 view = Some(unsafe { Retained::cast_unchecked::<NSView>(cell) });
             }
@@ -190,18 +252,45 @@ define_class!(
             let table_cell = unsafe { Retained::cast_unchecked::<NSTableCellView>(cell.clone()) };
 
             let is_dir = node.ivars().is_dir.get();
-            let _symbol_name = if is_dir { objc2_foundation::ns_string!("folder.fill") } else { objc2_foundation::ns_string!("doc.text.fill") };
+            let is_placeholder = node.ivars().is_loading_placeholder.get();
+            let name_str = node.ivars().name.borrow().clone();
 
             if let Some(iv) = unsafe { table_cell.imageView() } {
-                if node.ivars().is_loading_placeholder.get() {
-                    unsafe { iv.setImage(None) }; // No icon for loading placeholder
+                if is_placeholder {
+                    if name_str.starts_with("Cannot read") {
+                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                            objc2_foundation::ns_string!("exclamationmark.triangle"),
+                            None,
+                        ) {
+                            unsafe {
+                                iv.setImage(Some(&img));
+                                iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemOrangeColor()));
+                            };
+                        } else {
+                            unsafe { iv.setImage(None) };
+                        }
+                    } else if name_str.contains("No PDF") {
+                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                            objc2_foundation::ns_string!("doc.text.magnifyingglass"),
+                            None,
+                        ) {
+                            unsafe {
+                                iv.setImage(Some(&img));
+                                iv.setContentTintColor(Some(&objc2_app_kit::NSColor::tertiaryLabelColor()));
+                            };
+                        } else {
+                            unsafe { iv.setImage(None) };
+                        }
+                    } else {
+                        unsafe { iv.setImage(None) };
+                    }
                 } else if is_dir {
-                    unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::systemBlueColor())) };
+                    unsafe { iv.setContentTintColor(None) };
                     if let Some(img) = self.ivars().folder_image.borrow().as_ref() {
                         unsafe { iv.setImage(Some(img)) };
                     }
                 } else {
-                    unsafe { iv.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor())) };
+                    unsafe { iv.setContentTintColor(None) };
                     if let Some(img) = self.ivars().doc_image.borrow().as_ref() {
                         unsafe { iv.setImage(Some(img)) };
                     }
@@ -210,6 +299,7 @@ define_class!(
 
             let icloud_status = node.ivars().icloud_status.get();
             let download_progress = node.ivars().download_progress.get();
+            let has_badge = !is_placeholder && (icloud_status == 1 || icloud_status == 2 || icloud_status == 4);
 
             unsafe {
                 let subviews = table_cell.subviews();
@@ -227,32 +317,31 @@ define_class!(
                     }
                 }
 
-
-                let diag_state = if icloud_status == 0 { "Local" } else if icloud_status == 1 { "CloudOnly" } else if icloud_status == 2 { "Downloading" } else if icloud_status == 4 { "Failed" } else { "Unknown" };
-                let diag_icon = if icloud_status == 0 { "NONE" } else if icloud_status == 1 { "Cloud" } else if icloud_status == 2 { "Spinner" } else if icloud_status == 4 { "Failed" } else { "NONE" };
-                if icloud_status == 0 {
-                    println!("[DIAGNOSTIC] RENDER: state = {}, icon = {}", diag_state, diag_icon);
-                }
-
                 if let Some(civ) = cloud_iv {
-                    if icloud_status == 1 || icloud_status == 4 {
-                        civ.setHidden(false);
-
-                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(if icloud_status == 1 { objc2_foundation::ns_string!("icloud.and.arrow.down") } else { objc2_foundation::ns_string!("exclamationmark.icloud") }, None) {
+                    civ.setHidden(!has_badge);
+                    if has_badge {
+                        let sym = if icloud_status == 1 {
+                            objc2_foundation::ns_string!("icloud.and.arrow.down")
+                        } else if icloud_status == 2 {
+                            objc2_foundation::ns_string!("arrow.down.circle.fill")
+                        } else {
+                            objc2_foundation::ns_string!("exclamationmark.icloud")
+                        };
+                        if let Some(img) = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(sym, None) {
                             civ.setImage(Some(&img));
                             if icloud_status == 1 {
                                 civ.setContentTintColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor()));
+                            } else if icloud_status == 2 {
+                                civ.setContentTintColor(Some(&objc2_app_kit::NSColor::controlAccentColor()));
                             } else {
                                 civ.setContentTintColor(Some(&objc2_app_kit::NSColor::systemRedColor()));
                             }
                         }
-                    } else {
-                        civ.setHidden(true);
                     }
                 }
 
                 if let Some(pi) = progress {
-                    if icloud_status == 2 {
+                    if !is_placeholder && icloud_status == 2 {
                         pi.setHidden(false);
                         pi.startAnimation(None);
                         if download_progress > 0.0 {
@@ -266,13 +355,50 @@ define_class!(
                         pi.stopAnimation(None);
                     }
                 }
+
+                // Adjust text field trailing margin based on visible trailing badges
+                let trail_margin = if !is_placeholder && icloud_status == 2 {
+                    -40.0
+                } else if has_badge {
+                    -22.0
+                } else {
+                    -4.0
+                };
+
+                let constraints = cell.constraints();
+                for i in 0..constraints.count() {
+                    let c = constraints.objectAtIndex(i);
+                    if let Some(cid) = c.identifier() {
+                        if cid.isEqualToString(objc2_foundation::ns_string!("TfTrailing")) {
+                            c.setConstant(trail_margin);
+                        }
+                    }
+                }
             }
 
             if let Some(tf) = unsafe { table_cell.textField() } {
-                let name_str = &node.ivars().name.borrow();
-                let path_str = &node.ivars().path.borrow();
-                unsafe { tf.setStringValue(&NSString::from_str(name_str)) };
-                unsafe { table_cell.setToolTip(Some(&NSString::from_str(path_str))) };
+                let path_str = node.ivars().path.borrow().clone();
+                let tooltip = if !path_str.is_empty() {
+                    format!("{}\n{}", name_str, path_str)
+                } else {
+                    name_str.clone()
+                };
+                let ns_tooltip = NSString::from_str(&tooltip);
+                unsafe {
+                    tf.setStringValue(&NSString::from_str(&name_str));
+                    tf.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingMiddle);
+                    if is_placeholder {
+                        tf.setTextColor(Some(&objc2_app_kit::NSColor::secondaryLabelColor()));
+                        let font = objc2_app_kit::NSFont::systemFontOfSize(12.0);
+                        tf.setFont(Some(&font));
+                    } else {
+                        tf.setTextColor(Some(&objc2_app_kit::NSColor::labelColor()));
+                        let font = objc2_app_kit::NSFont::systemFontOfSize(13.0);
+                        tf.setFont(Some(&font));
+                    }
+                    tf.setToolTip(Some(&ns_tooltip));
+                    table_cell.setToolTip(Some(&ns_tooltip));
+                };
             }
             Retained::autorelease_ptr(cell)
         }
@@ -280,14 +406,22 @@ define_class!(
 );
 
 impl WorkspaceDelegate {
+    pub fn reload_data(&self) {
+        if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
+            if let Some(outline_view) = weak_view.load() {
+                unsafe { outline_view.reloadData() };
+            }
+        }
+    }
+
+    #[allow(deprecated)]
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(WorkspaceDelegateIvars::default());
-        let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+        let this: Retained<Self> = unsafe { objc2::msg_send![super(this), init] };
 
-        let ws = unsafe { objc2_app_kit::NSWorkspace::sharedWorkspace() };
-        let folder_img =
-            unsafe { ws.iconForFileType(objc2_foundation::ns_string!("public.folder")) };
-        let doc_img = unsafe { ws.iconForFileType(objc2_foundation::ns_string!("pdf")) };
+        let ws = objc2_app_kit::NSWorkspace::sharedWorkspace();
+        let folder_img = ws.iconForFileType(objc2_foundation::ns_string!("public.folder"));
+        let doc_img = ws.iconForFileType(objc2_foundation::ns_string!("pdf"));
 
         *this.ivars().folder_image.borrow_mut() = Some(folder_img);
         *this.ivars().doc_image.borrow_mut() = Some(doc_img);
@@ -309,7 +443,10 @@ impl WorkspaceDelegate {
         node: &crate::workspace::FileNode,
         target_path: &str,
     ) -> Option<objc2::rc::Retained<crate::workspace::FileNode>> {
-        if node.ivars().path.borrow().as_str() == target_path {
+        let node_p = node.ivars().path.borrow();
+        let clean_node = node_p.strip_prefix("/private").unwrap_or(&node_p);
+        let clean_target = target_path.strip_prefix("/private").unwrap_or(target_path);
+        if !clean_node.is_empty() && clean_node == clean_target {
             return Some(node.retain());
         }
         if let Some(children) = node.ivars().children.borrow().as_ref() {
@@ -333,6 +470,30 @@ impl WorkspaceDelegate {
                 Some(name),
                 None,
             );
+
+            let ta_opts: usize = 0x01 | 0x02 | 0x80 | 0x200;
+            let ta_alloc: *mut AnyObject = objc2::msg_send![objc2::class!(NSTrackingArea), alloc];
+            let ta: *mut AnyObject = objc2::msg_send![
+                ta_alloc,
+                initWithRect: view.bounds(),
+                options: ta_opts,
+                owner: self,
+                userInfo: std::ptr::null::<AnyObject>()
+            ];
+            if !ta.is_null() {
+                let _: () = objc2::msg_send![&**view, addTrackingArea: ta];
+            }
+
+            if let Some(scroll) = view.enclosingScrollView() {
+                let clip = scroll.contentView();
+                clip.setPostsBoundsChangedNotifications(true);
+                nc.addObserver_selector_name_object(
+                    self,
+                    objc2::sel!(outlineDidScroll:),
+                    Some(objc2_foundation::ns_string!("NSViewBoundsDidChangeNotification")),
+                    Some(&clip),
+                );
+            }
         }
     }
 }

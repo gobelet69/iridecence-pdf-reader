@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{DeclaredClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
     NSBackingStoreType, NSButton, NSColor, NSFont, NSSegmentedControl, NSTextField, NSView,
@@ -31,6 +31,18 @@ pub const PREF_DEEP_WORKSPACE_SEARCH: &str = "PrefDeepWorkspaceSearch";
 pub const PREF_APPEARANCE_MODE: &str = "PrefAppearanceMode";
 pub const PREF_LIQUID_GLASS: &str = "PrefLiquidGlass";
 pub const PREF_AUTO_COPY_OCR: &str = "PrefAutoCopyOcr";
+
+pub struct SettingsManager;
+
+impl SettingsManager {
+    pub fn bool_pref(key: &str, default: bool) -> bool {
+        get_bool_pref(key, default)
+    }
+
+    pub fn int_pref(key: &str, default: isize) -> isize {
+        get_int_pref(key, default)
+    }
+}
 
 pub fn get_bool_pref(key: &str, default: bool) -> bool {
     unsafe {
@@ -78,6 +90,9 @@ pub struct SettingsIvars {
     pub content_area: RefCell<Option<Retained<NSView>>>,
     pub active_tab: RefCell<isize>,
     pub seg_control: RefCell<Option<Retained<NSSegmentedControl>>>,
+    pub tab_pills: RefCell<Vec<Retained<NSView>>>,
+    pub tab_icons: RefCell<Vec<Retained<objc2_app_kit::NSImageView>>>,
+    pub tab_labels: RefCell<Vec<Retained<NSTextField>>>,
 }
 
 define_class!(
@@ -93,6 +108,9 @@ define_class!(
             if let Some(sender) = sender {
                 if let Some(seg) = sender.downcast_ref::<NSSegmentedControl>() {
                     let sel_tab = seg.selectedSegment();
+                    self.switch_to_tab(sel_tab);
+                } else if let Some(btn) = sender.downcast_ref::<NSButton>() {
+                    let sel_tab = btn.tag();
                     self.switch_to_tab(sel_tab);
                 }
             }
@@ -111,7 +129,10 @@ define_class!(
                         104 => set_bool_pref(PREF_OPEN_IN_NEW_TAB, is_on),
                         201 => set_bool_pref(PREF_RESTORE_READING_POS, is_on),
                         301 => set_bool_pref(PREF_AUTO_REVEAL_SIDEBAR, is_on),
-                        302 => set_bool_pref(PREF_SHOW_HIDDEN_FILES, is_on),
+                        302 => {
+                            set_bool_pref(PREF_SHOW_HIDDEN_FILES, is_on);
+                            self.notify_app_runtime_settings();
+                        }
                         303 => set_bool_pref(PREF_DEEP_WORKSPACE_SEARCH, is_on),
                         401 => set_bool_pref(PREF_LIQUID_GLASS, is_on),
                         501 => set_bool_pref(PREF_AUTO_COPY_OCR, is_on),
@@ -128,8 +149,14 @@ define_class!(
                     let tag = seg.tag();
                     let sel_idx = seg.selectedSegment();
                     match tag {
-                        210 => set_int_pref(PREF_DEFAULT_DISPLAY_MODE, sel_idx),
-                        220 => set_int_pref(PREF_DEFAULT_ZOOM_MODE, sel_idx),
+                        210 => {
+                            set_int_pref(PREF_DEFAULT_DISPLAY_MODE, sel_idx);
+                            self.notify_app_runtime_settings();
+                        }
+                        220 => {
+                            set_int_pref(PREF_DEFAULT_ZOOM_MODE, sel_idx);
+                            self.notify_app_runtime_settings();
+                        }
                         230 => set_int_pref(PREF_DEFAULT_HIGHLIGHT_COLOR, sel_idx),
                         410 => {
                             set_int_pref(PREF_APPEARANCE_MODE, sel_idx);
@@ -158,6 +185,7 @@ define_class!(
             set_bool_pref(PREF_LIQUID_GLASS, true);
             set_bool_pref(PREF_AUTO_COPY_OCR, true);
             self.apply_appearance(0);
+            self.notify_app_runtime_settings();
 
             let cur_tab = *self.ivars().active_tab.borrow();
             self.switch_to_tab(cur_tab);
@@ -170,6 +198,14 @@ impl SettingsDelegate {
         let this = Self::alloc(mtm).set_ivars(SettingsIvars::default());
         let this: Retained<Self> = unsafe { msg_send![super(this), init] };
         this
+    }
+
+    pub fn notify_app_runtime_settings(&self) {
+        let mtm = MainThreadMarker::from(self);
+        let app = NSApplication::sharedApplication(mtm);
+        if let Some(delegate) = unsafe { app.delegate() } {
+            let _: () = unsafe { msg_send![&*delegate, applyRuntimeSettings] };
+        }
     }
 
     pub fn apply_appearance(&self, mode: isize) {
@@ -197,6 +233,38 @@ impl SettingsDelegate {
         let mtm = MainThreadMarker::from(self);
         if let Some(seg) = self.ivars().seg_control.borrow().as_ref() {
             seg.setSelected_forSegment(true, index);
+        }
+
+        let pills = self.ivars().tab_pills.borrow();
+        let icons = self.ivars().tab_icons.borrow();
+        let labels = self.ivars().tab_labels.borrow();
+        for i in 0..pills.len() {
+            let is_sel = (i as isize) == index;
+            unsafe {
+                if let Some(layer) = pills[i].layer() {
+                    let bg = if is_sel {
+                        NSColor::controlAccentColor().colorWithAlphaComponent(0.16)
+                    } else {
+                        NSColor::clearColor()
+                    };
+                    let cg = bg.CGColor();
+                    let ptr = Retained::as_ptr(&cg);
+                    let _: () = msg_send![&layer, setBackgroundColor: ptr];
+                }
+                let accent = NSColor::controlAccentColor();
+                let sec = NSColor::secondaryLabelColor();
+                let tint = if is_sel { &accent } else { &sec };
+                if i < icons.len() {
+                    icons[i].setContentTintColor(Some(tint));
+                }
+                if i < labels.len() {
+                    labels[i].setTextColor(Some(tint));
+                    labels[i].setFont(Some(&NSFont::systemFontOfSize_weight(
+                        10.5,
+                        if is_sel { 0.3 } else { 0.0 },
+                    )));
+                }
+            }
         }
 
         if let Some(content_area) = self.ivars().content_area.borrow().as_ref() {
@@ -304,7 +372,7 @@ impl SettingsDelegate {
         );
 
         let c3 = self.make_checkbox(
-            "Reopen previously closed tabs (Cmd+Shift+T)",
+            "Reopen previously closed tabs",
             103,
             get_bool_pref(PREF_REOPEN_CLOSED_TABS, true),
             mtm,
@@ -326,7 +394,7 @@ impl SettingsDelegate {
 
         title
             .topAnchor()
-            .constraintEqualToAnchor_constant(&view.topAnchor(), 20.0)
+            .constraintEqualToAnchor_constant(&view.topAnchor(), 16.0)
             .setActive(true);
         title
             .leadingAnchor()
@@ -446,7 +514,7 @@ impl SettingsDelegate {
 
         l_mode
             .topAnchor()
-            .constraintEqualToAnchor_constant(&view.topAnchor(), 20.0)
+            .constraintEqualToAnchor_constant(&view.topAnchor(), 16.0)
             .setActive(true);
         l_mode
             .leadingAnchor()
@@ -463,7 +531,7 @@ impl SettingsDelegate {
 
         l_zoom
             .topAnchor()
-            .constraintEqualToAnchor_constant(&l_mode.bottomAnchor(), 22.0)
+            .constraintEqualToAnchor_constant(&l_mode.bottomAnchor(), 20.0)
             .setActive(true);
         l_zoom
             .leadingAnchor()
@@ -480,7 +548,7 @@ impl SettingsDelegate {
 
         l_color
             .topAnchor()
-            .constraintEqualToAnchor_constant(&l_zoom.bottomAnchor(), 22.0)
+            .constraintEqualToAnchor_constant(&l_zoom.bottomAnchor(), 20.0)
             .setActive(true);
         l_color
             .leadingAnchor()
@@ -497,7 +565,7 @@ impl SettingsDelegate {
 
         c_pos
             .topAnchor()
-            .constraintEqualToAnchor_constant(&l_color.bottomAnchor(), 24.0)
+            .constraintEqualToAnchor_constant(&l_color.bottomAnchor(), 22.0)
             .setActive(true);
         c_pos
             .leadingAnchor()
@@ -563,7 +631,7 @@ impl SettingsDelegate {
 
         title
             .topAnchor()
-            .constraintEqualToAnchor_constant(&view.topAnchor(), 20.0)
+            .constraintEqualToAnchor_constant(&view.topAnchor(), 16.0)
             .setActive(true);
         title
             .leadingAnchor()
@@ -571,7 +639,7 @@ impl SettingsDelegate {
             .setActive(true);
 
         c1.topAnchor()
-            .constraintEqualToAnchor_constant(&title.bottomAnchor(), 14.0)
+            .constraintEqualToAnchor_constant(&title.bottomAnchor(), 12.0)
             .setActive(true);
         c1.leadingAnchor()
             .constraintEqualToAnchor_constant(&view.leadingAnchor(), 24.0)
@@ -584,7 +652,7 @@ impl SettingsDelegate {
             .setActive(true);
 
         c2.topAnchor()
-            .constraintEqualToAnchor_constant(&s1.bottomAnchor(), 14.0)
+            .constraintEqualToAnchor_constant(&s1.bottomAnchor(), 12.0)
             .setActive(true);
         c2.leadingAnchor()
             .constraintEqualToAnchor_constant(&view.leadingAnchor(), 24.0)
@@ -597,7 +665,7 @@ impl SettingsDelegate {
             .setActive(true);
 
         c3.topAnchor()
-            .constraintEqualToAnchor_constant(&s2.bottomAnchor(), 14.0)
+            .constraintEqualToAnchor_constant(&s2.bottomAnchor(), 12.0)
             .setActive(true);
         c3.leadingAnchor()
             .constraintEqualToAnchor_constant(&view.leadingAnchor(), 24.0)
@@ -649,7 +717,7 @@ impl SettingsDelegate {
 
         l_theme
             .topAnchor()
-            .constraintEqualToAnchor_constant(&view.topAnchor(), 24.0)
+            .constraintEqualToAnchor_constant(&view.topAnchor(), 20.0)
             .setActive(true);
         l_theme
             .leadingAnchor()
@@ -666,7 +734,7 @@ impl SettingsDelegate {
 
         c_glass
             .topAnchor()
-            .constraintEqualToAnchor_constant(&l_theme.bottomAnchor(), 26.0)
+            .constraintEqualToAnchor_constant(&l_theme.bottomAnchor(), 22.0)
             .setActive(true);
         c_glass
             .leadingAnchor()
@@ -688,9 +756,19 @@ impl SettingsDelegate {
         let zero_rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
         let view = NSView::initWithFrame(NSView::alloc(mtm), zero_rect);
 
+        let title_shortcuts = self.make_header_label("Keyboard Shortcuts", mtm);
+        let s_sc1 = self.make_secondary_label(
+            "⌘P Quick Open   •   ⌘⇧P Command Palette   •   ⌘F Search Document",
+            mtm,
+        );
+        let s_sc2 = self.make_secondary_label(
+            "⌘D Bookmark Page   •   ⌘I Document Info   •   ⌘⇧R OCR Current Page",
+            mtm,
+        );
+
         let title_ocr = self.make_header_label("Optical Character Recognition (OCR)", mtm);
         let ocr_info = self.make_secondary_label(
-            "Engine: Apple Vision Framework (Level: Accurate, Neural Engine accelerated)",
+            "Engine: Apple Vision Framework (Accurate, Neural Engine accelerated)",
             mtm,
         );
 
@@ -705,7 +783,7 @@ impl SettingsDelegate {
         let btn_reset = unsafe {
             let b = NSButton::initWithFrame(NSButton::alloc(mtm), zero_rect);
             b.setTitle(ns_string!("Reset All Preferences to Defaults"));
-            b.setBezelStyle(objc2_app_kit::NSBezelStyle::Rounded);
+            let _: () = msg_send![&b, setBezelStyle: 1usize];
             b.setTarget(Some(&*self));
             b.setAction(Some(sel!(resetDefaults:)));
             b.setFont(Some(&NSFont::systemFontOfSize(12.0)));
@@ -713,15 +791,45 @@ impl SettingsDelegate {
             b
         };
 
+        view.addSubview(&title_shortcuts);
+        view.addSubview(&s_sc1);
+        view.addSubview(&s_sc2);
         view.addSubview(&title_ocr);
         view.addSubview(&ocr_info);
         view.addSubview(&c_ocr);
         view.addSubview(&title_reset);
         view.addSubview(&btn_reset);
 
+        title_shortcuts
+            .topAnchor()
+            .constraintEqualToAnchor_constant(&view.topAnchor(), 14.0)
+            .setActive(true);
+        title_shortcuts
+            .leadingAnchor()
+            .constraintEqualToAnchor_constant(&view.leadingAnchor(), 24.0)
+            .setActive(true);
+
+        s_sc1
+            .topAnchor()
+            .constraintEqualToAnchor_constant(&title_shortcuts.bottomAnchor(), 4.0)
+            .setActive(true);
+        s_sc1
+            .leadingAnchor()
+            .constraintEqualToAnchor_constant(&view.leadingAnchor(), 24.0)
+            .setActive(true);
+
+        s_sc2
+            .topAnchor()
+            .constraintEqualToAnchor_constant(&s_sc1.bottomAnchor(), 3.0)
+            .setActive(true);
+        s_sc2
+            .leadingAnchor()
+            .constraintEqualToAnchor_constant(&view.leadingAnchor(), 24.0)
+            .setActive(true);
+
         title_ocr
             .topAnchor()
-            .constraintEqualToAnchor_constant(&view.topAnchor(), 20.0)
+            .constraintEqualToAnchor_constant(&s_sc2.bottomAnchor(), 14.0)
             .setActive(true);
         title_ocr
             .leadingAnchor()
@@ -738,7 +846,7 @@ impl SettingsDelegate {
 
         c_ocr
             .topAnchor()
-            .constraintEqualToAnchor_constant(&ocr_info.bottomAnchor(), 14.0)
+            .constraintEqualToAnchor_constant(&ocr_info.bottomAnchor(), 8.0)
             .setActive(true);
         c_ocr
             .leadingAnchor()
@@ -747,7 +855,7 @@ impl SettingsDelegate {
 
         title_reset
             .topAnchor()
-            .constraintEqualToAnchor_constant(&c_ocr.bottomAnchor(), 28.0)
+            .constraintEqualToAnchor_constant(&c_ocr.bottomAnchor(), 14.0)
             .setActive(true);
         title_reset
             .leadingAnchor()
@@ -756,7 +864,7 @@ impl SettingsDelegate {
 
         btn_reset
             .topAnchor()
-            .constraintEqualToAnchor_constant(&title_reset.bottomAnchor(), 10.0)
+            .constraintEqualToAnchor_constant(&title_reset.bottomAnchor(), 6.0)
             .setActive(true);
         btn_reset
             .leadingAnchor()
@@ -785,10 +893,11 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
 
             let vis = WindowGeometry::screen_visible_frame(None, mtm);
             let default_frame = WindowGeometry::default_frame(vis, WindowKind::Utility);
-            let rect = NSRect::new(default_frame.origin, NSSize::new(520.0, 390.0));
+            let rect = NSRect::new(default_frame.origin, NSSize::new(520.0, 340.0));
             let style = NSWindowStyleMask::Titled
                 | NSWindowStyleMask::Closable
-                | NSWindowStyleMask::Miniaturizable;
+                | NSWindowStyleMask::Miniaturizable
+                | NSWindowStyleMask::FullSizeContentView;
 
             let window = unsafe {
                 NSWindow::initWithContentRect_styleMask_backing_defer(
@@ -801,12 +910,17 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
             };
 
             unsafe {
+                window.setReleasedWhenClosed(false);
+                window.setTitlebarAppearsTransparent(true);
+                window.setOpaque(false);
+                window.setBackgroundColor(Some(&NSColor::clearColor()));
+                window.setHasShadow(true);
                 window.setTitle(ns_string!("Settings"));
                 let del_ptr: *const SettingsDelegate = &*del;
                 let _: () = msg_send![&window, setDelegate: del_ptr];
             }
 
-            // Top Header with Segmented Tabs
+            // Top Header with Native Icon-Above-Label Category Bar
             let header_view = unsafe {
                 let zero_rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
                 let effect =
@@ -818,64 +932,123 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
                 effect
             };
 
-            let seg = unsafe {
-                let zero_rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
-                let s =
-                    NSSegmentedControl::initWithFrame(NSSegmentedControl::alloc(mtm), zero_rect);
-                s.setSegmentCount(5);
-                s.setLabel_forSegment(ns_string!("General"), 0);
-                s.setLabel_forSegment(ns_string!("Reading"), 1);
-                s.setLabel_forSegment(ns_string!("Workspace"), 2);
-                s.setLabel_forSegment(ns_string!("Appearance"), 3);
-                s.setLabel_forSegment(ns_string!("Advanced"), 4);
+            let categories = [
+                ("General", "gearshape"),
+                ("Reading", "book"),
+                ("Workspace", "folder"),
+                ("Appearance", "circle.lefthalf.filled"),
+                ("Advanced", "slider.horizontal.3"),
+            ];
 
-                if let Some(img) =
-                    objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                        ns_string!("gearshape"),
-                        None,
-                    )
-                {
-                    s.setImage_forSegment(Some(&img), 0);
-                }
-                if let Some(img) =
-                    objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                        ns_string!("book"),
-                        None,
-                    )
-                {
-                    s.setImage_forSegment(Some(&img), 1);
-                }
-                if let Some(img) =
-                    objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                        ns_string!("folder"),
-                        None,
-                    )
-                {
-                    s.setImage_forSegment(Some(&img), 2);
-                }
-                if let Some(img) =
-                    objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                        ns_string!("circle.lefthalf.filled"),
-                        None,
-                    )
-                {
-                    s.setImage_forSegment(Some(&img), 3);
-                }
-                if let Some(img) =
-                    objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                        ns_string!("slider.horizontal.3"),
-                        None,
-                    )
-                {
-                    s.setImage_forSegment(Some(&img), 4);
-                }
-
-                s.setSelectedSegment(0);
-                s.setTarget(Some(&*del));
-                s.setAction(Some(sel!(tabChanged:)));
-                s.setTranslatesAutoresizingMaskIntoConstraints(false);
-                s
+            let tab_bar_container = unsafe {
+                let v = NSView::initWithFrame(
+                    NSView::alloc(mtm),
+                    NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 46.0)),
+                );
+                v.setTranslatesAutoresizingMaskIntoConstraints(false);
+                v
             };
+
+            let mut pills = Vec::new();
+            let mut icons = Vec::new();
+            let mut labels = Vec::new();
+
+            for (idx, (label_text, symbol_name)) in categories.iter().enumerate() {
+                unsafe {
+                    let pill = NSView::initWithFrame(
+                        NSView::alloc(mtm),
+                        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(74.0, 44.0)),
+                    );
+                    pill.setWantsLayer(true);
+                    if let Some(layer) = pill.layer() {
+                        let _: () = msg_send![&layer, setCornerRadius: 7.0f64];
+                    }
+                    pill.setTranslatesAutoresizingMaskIntoConstraints(false);
+
+                    let icon_cfg = objc2_app_kit::NSImageSymbolConfiguration::configurationWithPointSize_weight_scale(
+                        15.0,
+                        0.0,
+                        objc2_app_kit::NSImageSymbolScale::Medium,
+                    );
+                    let img = objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                        &NSString::from_str(symbol_name),
+                        Some(&NSString::from_str(label_text)),
+                    )
+                    .and_then(|i| i.imageWithSymbolConfiguration(&icon_cfg))
+                    .unwrap_or_else(|| objc2_app_kit::NSImage::new());
+                    let iv = objc2_app_kit::NSImageView::imageViewWithImage(&img, mtm);
+                    iv.setTranslatesAutoresizingMaskIntoConstraints(false);
+
+                    let lbl = NSTextField::labelWithString(&NSString::from_str(label_text), mtm);
+                    lbl.setFont(Some(&NSFont::systemFontOfSize(10.5)));
+                    lbl.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+                    lbl.setTranslatesAutoresizingMaskIntoConstraints(false);
+
+                    let hit_btn = NSButton::initWithFrame(
+                        NSButton::alloc(mtm),
+                        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(74.0, 44.0)),
+                    );
+                    hit_btn.setTitle(ns_string!(""));
+                    hit_btn.setBordered(false);
+                    let _: () = msg_send![&hit_btn, setTransparent: true];
+                    hit_btn.setTag(idx as isize);
+                    hit_btn.setTarget(Some(&*del));
+                    hit_btn.setAction(Some(sel!(tabChanged:)));
+                    hit_btn.setTranslatesAutoresizingMaskIntoConstraints(false);
+
+                    pill.addSubview(&iv);
+                    pill.addSubview(&lbl);
+                    pill.addSubview(&hit_btn);
+                    tab_bar_container.addSubview(&pill);
+
+                    let x_offset = (idx as f64) * 78.0;
+                    pill.leadingAnchor()
+                        .constraintEqualToAnchor_constant(&tab_bar_container.leadingAnchor(), x_offset)
+                        .setActive(true);
+                    pill.centerYAnchor()
+                        .constraintEqualToAnchor(&tab_bar_container.centerYAnchor())
+                        .setActive(true);
+                    pill.widthAnchor().constraintEqualToConstant(74.0).setActive(true);
+                    pill.heightAnchor().constraintEqualToConstant(44.0).setActive(true);
+
+                    iv.centerXAnchor()
+                        .constraintEqualToAnchor(&pill.centerXAnchor())
+                        .setActive(true);
+                    iv.topAnchor()
+                        .constraintEqualToAnchor_constant(&pill.topAnchor(), 5.0)
+                        .setActive(true);
+                    iv.widthAnchor().constraintEqualToConstant(18.0).setActive(true);
+                    iv.heightAnchor().constraintEqualToConstant(18.0).setActive(true);
+
+                    lbl.centerXAnchor()
+                        .constraintEqualToAnchor(&pill.centerXAnchor())
+                        .setActive(true);
+                    lbl.bottomAnchor()
+                        .constraintEqualToAnchor_constant(&pill.bottomAnchor(), -4.0)
+                        .setActive(true);
+
+                    hit_btn
+                        .leadingAnchor()
+                        .constraintEqualToAnchor(&pill.leadingAnchor())
+                        .setActive(true);
+                    hit_btn
+                        .trailingAnchor()
+                        .constraintEqualToAnchor(&pill.trailingAnchor())
+                        .setActive(true);
+                    hit_btn
+                        .topAnchor()
+                        .constraintEqualToAnchor(&pill.topAnchor())
+                        .setActive(true);
+                    hit_btn
+                        .bottomAnchor()
+                        .constraintEqualToAnchor(&pill.bottomAnchor())
+                        .setActive(true);
+
+                    pills.push(pill);
+                    icons.push(iv);
+                    labels.push(lbl);
+                }
+            }
 
             let sep = unsafe {
                 let zero_rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
@@ -897,11 +1070,18 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
             };
 
             let _root_view = unsafe {
-                let v = NSView::initWithFrame(NSView::alloc(mtm), rect);
+                let v = NSVisualEffectView::initWithFrame(NSVisualEffectView::alloc(mtm), rect);
+                v.setMaterial(NSVisualEffectMaterial::UnderWindowBackground);
+                v.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+                v.setState(NSVisualEffectState::FollowsWindowActiveState);
+                v.setAutoresizingMask(
+                    objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable
+                        | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable,
+                );
                 v.addSubview(&header_view);
                 v.addSubview(&content_area);
 
-                header_view.addSubview(&seg);
+                header_view.addSubview(&tab_bar_container);
                 header_view.addSubview(&sep);
 
                 header_view
@@ -918,14 +1098,24 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
                     .setActive(true);
                 header_view
                     .heightAnchor()
-                    .constraintEqualToConstant(54.0)
+                    .constraintEqualToConstant(80.0)
                     .setActive(true);
 
-                seg.centerXAnchor()
+                tab_bar_container
+                    .centerXAnchor()
                     .constraintEqualToAnchor(&header_view.centerXAnchor())
                     .setActive(true);
-                seg.centerYAnchor()
-                    .constraintEqualToAnchor(&header_view.centerYAnchor())
+                tab_bar_container
+                    .bottomAnchor()
+                    .constraintEqualToAnchor_constant(&header_view.bottomAnchor(), -4.0)
+                    .setActive(true);
+                tab_bar_container
+                    .widthAnchor()
+                    .constraintEqualToConstant(386.0)
+                    .setActive(true);
+                tab_bar_container
+                    .heightAnchor()
+                    .constraintEqualToConstant(46.0)
                     .setActive(true);
 
                 sep.bottomAnchor()
@@ -964,7 +1154,9 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
 
             del.ivars().window.borrow_mut().replace(window.clone());
             del.ivars().content_area.borrow_mut().replace(content_area);
-            del.ivars().seg_control.borrow_mut().replace(seg);
+            *del.ivars().tab_pills.borrow_mut() = pills;
+            *del.ivars().tab_icons.borrow_mut() = icons;
+            *del.ivars().tab_labels.borrow_mut() = labels;
 
             del.switch_to_tab(0);
 
@@ -978,7 +1170,26 @@ pub fn show_settings_window(mtm: MainThreadMarker) {
             win.center();
             win.makeKeyAndOrderFront(None);
             let app = NSApplication::sharedApplication(mtm);
-            app.activateIgnoringOtherApps(true);
+            let _: () = msg_send![&app, activateIgnoringOtherApps: true];
+        }
+    }
+}
+
+pub fn apply_appearance_mode(mode: isize, mtm: MainThreadMarker) {
+    let app = NSApplication::sharedApplication(mtm);
+    unsafe {
+        match mode {
+            1 => {
+                let aqua = NSAppearance::appearanceNamed(NSAppearanceNameAqua);
+                app.setAppearance(aqua.as_deref());
+            }
+            2 => {
+                let dark = NSAppearance::appearanceNamed(NSAppearanceNameDarkAqua);
+                app.setAppearance(dark.as_deref());
+            }
+            _ => {
+                app.setAppearance(None);
+            }
         }
     }
 }

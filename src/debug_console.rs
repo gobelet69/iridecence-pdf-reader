@@ -1,7 +1,7 @@
 use objc2::rc::Retained;
-use objc2::{DeclaredClass, MainThreadOnly, define_class, runtime::AnyObject, sel};
+use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, runtime::AnyObject, sel};
 use objc2_app_kit::{
-    NSBackingStoreType, NSBezelStyle, NSButton, NSColor, NSFont, NSScrollView, NSTextView, NSView,
+    NSBackingStoreType, NSButton, NSColor, NSFont, NSScrollView, NSTextView, NSView,
     NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
     NSWindow, NSWindowStyleMask,
 };
@@ -26,12 +26,12 @@ define_class!(
     struct DebugConsoleController;
 
     impl DebugConsoleController {
-
         #[unsafe(method(clearLogs:))]
         fn clear_logs(&self, _sender: Option<&AnyObject>) {
-            if let Ok(mut buffer) = crate::logger::LOG_BUFFER.lock() {
-                buffer.clear();
-            }
+            let mut buffer = crate::logger::LOG_BUFFER
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            buffer.clear();
             unsafe { self.ivars().text_view.setString(&NSString::from_str("")) };
         }
 
@@ -44,13 +44,27 @@ define_class!(
                     unsafe { btn.setTitle(&NSString::from_str("Resume")) };
                 } else {
                     unsafe { btn.setTitle(&NSString::from_str("Pause")) };
-                    // Flush missed logs? Maybe just keep them in buffer
-                    let buffer = crate::logger::LOG_BUFFER.lock().unwrap();
+                    let buffer = crate::logger::LOG_BUFFER
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner());
                     let mut all_text = String::new();
                     for msg in buffer.iter() {
-                        all_text.push_str(&format!("[{}] [{}] [{}] {}\n", msg.timestamp, msg.thread_name, msg.category, msg.event));
+                        all_text.push_str(&format!(
+                            "[{}] [{}] [{}] {}\n",
+                            msg.timestamp, msg.thread_name, msg.category, msg.event
+                        ));
                     }
-                    unsafe { self.ivars().text_view.setString(&NSString::from_str(&all_text)) };
+                    unsafe {
+                        self.ivars()
+                            .text_view
+                            .setString(&NSString::from_str(&all_text));
+                        self.ivars()
+                            .text_view
+                            .setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(11.5, 0.0)));
+                        self.ivars()
+                            .text_view
+                            .setTextColor(Some(&NSColor::labelColor()));
+                    };
                 }
             }
         }
@@ -66,25 +80,42 @@ define_class!(
 
         #[unsafe(method(appendLogLine:))]
         fn append_log_line(&self, line: &NSString) {
-            if self.ivars().is_paused.get() { return; }
+            if self.ivars().is_paused.get() {
+                return;
+            }
 
-            let text_storage: *mut AnyObject = unsafe { objc2::msg_send![&self.ivars().text_view, textStorage] };
-            let attr_str: *mut AnyObject = unsafe { objc2::msg_send![objc2::class!(NSAttributedString), alloc] };
-            let attr_str: *mut AnyObject = unsafe { objc2::msg_send![attr_str, initWithString: line] };
-            let _: () = unsafe { objc2::msg_send![text_storage, appendAttributedString: attr_str] };
+            unsafe {
+                let text_storage: *mut AnyObject = msg_send![&self.ivars().text_view, textStorage];
+                if !text_storage.is_null() {
+                    let mutable_str: *mut AnyObject = msg_send![text_storage, mutableString];
+                    if !mutable_str.is_null() {
+                        let _: () = msg_send![mutable_str, appendString: line];
+                    }
+                    self.ivars()
+                        .text_view
+                        .setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(11.5, 0.0)));
+                    self.ivars()
+                        .text_view
+                        .setTextColor(Some(&NSColor::labelColor()));
 
-            if self.ivars().auto_scroll.get() {
-                let length: objc2_foundation::NSUInteger = unsafe { objc2::msg_send![text_storage, length] };
-                let range = objc2_foundation::NSRange::new(length, 0);
-                let _: () = unsafe { objc2::msg_send![&self.ivars().text_view, scrollRangeToVisible: range] };
+                    if self.ivars().auto_scroll.get() {
+                        let length: objc2_foundation::NSUInteger = msg_send![text_storage, length];
+                        let range = objc2_foundation::NSRange::new(length, 0);
+                        let _: () = msg_send![&self.ivars().text_view, scrollRangeToVisible: range];
+                    }
+                }
             }
         }
     }
 );
 
 pub fn show_debug_console() {
-    let mtm = objc2::MainThreadMarker::new().unwrap();
-    let mut guard = DEBUG_WINDOW_CONTROLLER.lock().unwrap();
+    let Some(mtm) = objc2::MainThreadMarker::new() else {
+        return;
+    };
+    let mut guard = DEBUG_WINDOW_CONTROLLER
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     if guard.is_none() {
         let vc = DebugConsoleController::new(mtm);
         *guard = Some(Retained::into_raw(vc) as usize);
@@ -92,23 +123,24 @@ pub fn show_debug_console() {
 
     if let Some(ptr) = *guard {
         let vc = ptr as *mut AnyObject;
-        let window = {
-            let vc_retained: &DebugConsoleController = unsafe { &*(vc as *const _) };
-            vc_retained.ivars().window.get().unwrap()
-        };
-        crate::window_geometry::WindowGeometry::sanitize_window(
-            &window,
-            crate::window_geometry::WindowKind::DebugConsole,
-            mtm,
-        );
-        let _: () = unsafe {
-            objc2::msg_send![&**window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()]
-        };
+        let vc_retained: &DebugConsoleController = unsafe { &*(vc as *const _) };
+        if let Some(window) = vc_retained.ivars().window.get() {
+            crate::window_geometry::WindowGeometry::sanitize_window(
+                window,
+                crate::window_geometry::WindowKind::DebugConsole,
+                mtm,
+            );
+            let _: () = unsafe {
+                msg_send![&**window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()]
+            };
+        }
     }
 }
 
 pub fn get_debug_window() -> Option<Retained<NSWindow>> {
-    let guard = DEBUG_WINDOW_CONTROLLER.lock().ok()?;
+    let guard = DEBUG_WINDOW_CONTROLLER
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     let ptr = (*guard)?;
     let vc_retained: &DebugConsoleController = unsafe { &*(ptr as *const _) };
     vc_retained.ivars().window.get().cloned()
@@ -128,7 +160,7 @@ impl DebugConsoleController {
             is_paused: std::cell::Cell::new(false),
             auto_scroll: std::cell::Cell::new(true),
         });
-        let this: Retained<Self> = unsafe { objc2::msg_send_id![super(this), init] };
+        let this: Retained<Self> = unsafe { msg_send![super(this), init] };
 
         let vis = crate::window_geometry::WindowGeometry::screen_visible_frame(None, mtm);
         let rect = crate::window_geometry::WindowGeometry::default_frame(
@@ -150,6 +182,9 @@ impl DebugConsoleController {
         unsafe {
             window.setTitle(&NSString::from_str("Live Debug Console"));
             window.setTitlebarAppearsTransparent(true);
+            window.setOpaque(false);
+            window.setBackgroundColor(Some(&NSColor::clearColor()));
+            window.setHasShadow(true);
             window.setReleasedWhenClosed(false);
         };
         crate::window_geometry::WindowGeometry::sanitize_window(
@@ -161,7 +196,7 @@ impl DebugConsoleController {
         let toolbar = unsafe {
             NSView::initWithFrame(
                 NSView::alloc(mtm),
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 36.0)),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 30.0)),
             )
         };
 
@@ -172,7 +207,9 @@ impl DebugConsoleController {
                 Some(sel!(clearLogs:)),
                 mtm,
             );
-            btn.setBezelStyle(NSBezelStyle::Rounded);
+            let _: () = msg_send![&btn, setBezelStyle: 1usize];
+            let _: () = msg_send![&btn, setControlSize: 1usize];
+            btn.setFont(Some(&NSFont::systemFontOfSize(11.0)));
             btn
         };
         let btn_pause = unsafe {
@@ -182,7 +219,9 @@ impl DebugConsoleController {
                 Some(sel!(togglePause:)),
                 mtm,
             );
-            btn.setBezelStyle(NSBezelStyle::Rounded);
+            let _: () = msg_send![&btn, setBezelStyle: 1usize];
+            let _: () = msg_send![&btn, setControlSize: 1usize];
+            btn.setFont(Some(&NSFont::systemFontOfSize(11.0)));
             btn
         };
         let btn_autoscroll = unsafe {
@@ -192,8 +231,24 @@ impl DebugConsoleController {
                 Some(sel!(toggleAutoScroll:)),
                 mtm,
             );
-            btn.setBezelStyle(NSBezelStyle::Rounded);
+            let _: () = msg_send![&btn, setBezelStyle: 1usize];
+            let _: () = msg_send![&btn, setControlSize: 1usize];
+            btn.setFont(Some(&NSFont::systemFontOfSize(11.0)));
             btn
+        };
+        let sep = unsafe {
+            let v = NSView::initWithFrame(
+                NSView::alloc(mtm),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 1.0)),
+            );
+            v.setWantsLayer(true);
+            if let Some(layer) = v.layer() {
+                let cg = NSColor::separatorColor().CGColor();
+                let ptr = Retained::as_ptr(&cg);
+                let _: () = msg_send![&layer, setBackgroundColor: ptr];
+            }
+            v.setTranslatesAutoresizingMaskIntoConstraints(false);
+            v
         };
         unsafe {
             btn_autoscroll.setState(1);
@@ -204,29 +259,40 @@ impl DebugConsoleController {
             toolbar.addSubview(&btn_clear);
             toolbar.addSubview(&btn_pause);
             toolbar.addSubview(&btn_autoscroll);
+            toolbar.addSubview(&sep);
 
             objc2_app_kit::NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
                 &*btn_clear
                     .leadingAnchor()
-                    .constraintEqualToAnchor_constant(&toolbar.leadingAnchor(), 14.0),
+                    .constraintEqualToAnchor_constant(&toolbar.leadingAnchor(), 12.0),
                 &*btn_clear
                     .centerYAnchor()
                     .constraintEqualToAnchor(&toolbar.centerYAnchor()),
-                &*btn_clear.widthAnchor().constraintEqualToConstant(70.0),
+                &*btn_clear.widthAnchor().constraintEqualToConstant(56.0),
                 &*btn_pause
                     .leadingAnchor()
-                    .constraintEqualToAnchor_constant(&btn_clear.trailingAnchor(), 8.0),
+                    .constraintEqualToAnchor_constant(&btn_clear.trailingAnchor(), 6.0),
                 &*btn_pause
                     .centerYAnchor()
                     .constraintEqualToAnchor(&toolbar.centerYAnchor()),
-                &*btn_pause.widthAnchor().constraintEqualToConstant(70.0),
+                &*btn_pause.widthAnchor().constraintEqualToConstant(56.0),
                 &*btn_autoscroll
                     .leadingAnchor()
-                    .constraintEqualToAnchor_constant(&btn_pause.trailingAnchor(), 8.0),
+                    .constraintEqualToAnchor_constant(&btn_pause.trailingAnchor(), 6.0),
                 &*btn_autoscroll
                     .centerYAnchor()
                     .constraintEqualToAnchor(&toolbar.centerYAnchor()),
-                &*btn_autoscroll.widthAnchor().constraintEqualToConstant(96.0),
+                &*btn_autoscroll.widthAnchor().constraintEqualToConstant(80.0),
+                &*sep
+                    .leadingAnchor()
+                    .constraintEqualToAnchor(&toolbar.leadingAnchor()),
+                &*sep
+                    .trailingAnchor()
+                    .constraintEqualToAnchor(&toolbar.trailingAnchor()),
+                &*sep
+                    .bottomAnchor()
+                    .constraintEqualToAnchor(&toolbar.bottomAnchor()),
+                &*sep.heightAnchor().constraintEqualToConstant(1.0),
             ]));
         };
 
@@ -247,6 +313,9 @@ impl DebugConsoleController {
             this.ivars().text_view.setDrawsBackground(false);
             this.ivars()
                 .text_view
+                .setTextContainerInset(NSSize::new(10.0, 8.0));
+            this.ivars()
+                .text_view
                 .setAutoresizingMask(objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable);
             this.ivars().text_view.setMinSize(NSSize::new(0.0, 0.0));
             this.ivars()
@@ -256,7 +325,7 @@ impl DebugConsoleController {
             this.ivars().text_view.setHorizontallyResizable(false);
             this.ivars()
                 .text_view
-                .setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(11.5, 0.0)));
+                .setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(11.0, 0.0)));
             this.ivars()
                 .text_view
                 .setTextColor(Some(&*NSColor::labelColor()));
@@ -281,7 +350,7 @@ impl DebugConsoleController {
 
             toolbar
                 .topAnchor()
-                .constraintEqualToAnchor_constant(&effect.topAnchor(), 32.0)
+                .constraintEqualToAnchor_constant(&effect.topAnchor(), 28.0)
                 .setActive(true);
             toolbar
                 .leadingAnchor()
@@ -293,7 +362,7 @@ impl DebugConsoleController {
                 .setActive(true);
             toolbar
                 .heightAnchor()
-                .constraintEqualToConstant(36.0)
+                .constraintEqualToConstant(30.0)
                 .setActive(true);
 
             scroll
@@ -318,7 +387,9 @@ impl DebugConsoleController {
 
         let _ = this.ivars().window.set(window.clone());
 
-        let mut buffer = crate::logger::LOG_BUFFER.lock().unwrap();
+        let mut buffer = crate::logger::LOG_BUFFER
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         if buffer.is_empty() {
             buffer.push(crate::logger::LogMessage {
                 timestamp: chrono::Local::now().format("%H:%M:%S.%3f").to_string(),

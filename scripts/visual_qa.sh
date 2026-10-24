@@ -25,9 +25,12 @@ rm -rf "$HOME/Library/Saved Application State/com.iridecence.pdfreader.savedStat
 defaults write com.iridecence.pdfreader ApplePersistenceIgnoreState YES
 sleep 1
 
+SAFE_PASS=$(echo "$PASS" | tr '/' '_')
+LOG_FILE="/tmp/visual_qa_${SAFE_PASS}.log"
+
 # 3. Launch with QA environment variables
 echo "Launching app with IRIDESCENCE_VISUAL_QA=1..."
-IRIDESCENCE_VISUAL_QA=1 IRIDESCENCE_VISUAL_QA_PASS="$PASS" "Iridecence PDF Reader.app/Contents/MacOS/oxireader" > "/tmp/visual_qa_$PASS.log" 2>&1 &
+IRIDESCENCE_VISUAL_QA=1 IRIDESCENCE_VISUAL_QA_PASS="$PASS" "Iridecence PDF Reader.app/Contents/MacOS/oxireader" > "$LOG_FILE" 2>&1 &
 APP_PID=$!
 
 echo "App launched with PID $APP_PID, waiting for QA sequence..."
@@ -38,7 +41,7 @@ ELAPSED=0
 DONE=0
 
 while [ $ELAPSED -lt $TIMEOUT ]; do
-    if grep -q "\[VISUAL_QA_DONE\]" "/tmp/visual_qa_$PASS.log" 2>/dev/null; then
+    if grep -q "\[VISUAL_QA_DONE\]" "$LOG_FILE" 2>/dev/null; then
         echo "Visual QA sequence completed successfully!"
         DONE=1
         break
@@ -49,7 +52,7 @@ done
 
 if [ $DONE -eq 0 ]; then
     echo "Warning: QA sequence did not report completion within ${TIMEOUT}s. Inspecting log:"
-    cat "/tmp/visual_qa_$PASS.log" | tail -n 20
+    cat "$LOG_FILE" | tail -n 20
 fi
 
 # 5. Report generated screenshots

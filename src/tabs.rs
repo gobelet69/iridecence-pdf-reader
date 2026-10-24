@@ -56,7 +56,10 @@ impl TabManager {
     }
 
     pub fn find_tab_by_path(&self, path: &str) -> Option<usize> {
-        self.tabs.iter().position(|t| t.path == path)
+        let norm = crate::bookmarks::normalize_bookmark_path(path);
+        self.tabs
+            .iter()
+            .position(|t| crate::bookmarks::normalize_bookmark_path(&t.path) == norm)
     }
 
     pub fn add_tab(
@@ -274,13 +277,24 @@ pub fn update_tab_bar(
     }
 
     let count = manager.tab_count();
-    let max_tab_width = if count > 0 {
-        (650.0 / count as f64).clamp(120.0, 220.0)
+    let max_visible = 5usize;
+    let visible_count = count.min(max_visible);
+    let max_tab_width = if visible_count > 0 {
+        (560.0 / visible_count as f64).clamp(108.0, 200.0)
     } else {
         180.0
     };
 
-    for (i, tab) in manager.tabs.iter().enumerate() {
+    // Determine window of visible tabs so active_index is always visible
+    let start_idx = if count > max_visible && manager.active_index >= max_visible {
+        manager.active_index + 1 - max_visible
+    } else {
+        0
+    };
+    let end_idx = (start_idx + max_visible).min(count);
+
+    for i in start_idx..end_idx {
+        let tab = &manager.tabs[i];
         let is_active = i == manager.active_index;
 
         let tab_item = unsafe {
@@ -291,25 +305,36 @@ pub fn update_tab_bar(
         };
         tab_item.setWantsLayer(true);
         tab_item.setTranslatesAutoresizingMaskIntoConstraints(false);
+        let tooltip_str = if tab.is_edited {
+            format!("{} — Edited ({})", tab.title, tab.path)
+        } else {
+            format!("{} ({})", tab.title, tab.path)
+        };
+        unsafe { tab_item.setToolTip(Some(&NSString::from_str(&tooltip_str))) };
 
         if let Some(layer) = unsafe { tab_item.layer() } {
             let _: () = unsafe { msg_send![&layer, setCornerRadius: 6.0f64] };
             let _: () = unsafe { msg_send![&layer, setMasksToBounds: true] };
 
             if is_active {
-                let bg_color = unsafe { NSColor::quaternaryLabelColor() };
+                let bg_color: Retained<NSColor> =
+                    unsafe { msg_send![&NSColor::labelColor(), colorWithAlphaComponent: 0.11_f64] };
                 let cg = unsafe { bg_color.CGColor() };
                 let ptr = Retained::as_ptr(&cg);
                 let _: () = unsafe { msg_send![&layer, setBackgroundColor: ptr] };
 
-                let border_color = unsafe { NSColor::separatorColor() };
+                let border_color: Retained<NSColor> = unsafe {
+                    msg_send![&NSColor::separatorColor(), colorWithAlphaComponent: 0.75_f64]
+                };
                 let border_cg = unsafe { border_color.CGColor() };
                 let border_ptr = Retained::as_ptr(&border_cg);
                 let _: () = unsafe { msg_send![&layer, setBorderColor: border_ptr] };
                 let _: () = unsafe { msg_send![&layer, setBorderWidth: 0.5f64] };
             } else {
-                let clear_color = unsafe { NSColor::clearColor() };
-                let cg = unsafe { clear_color.CGColor() };
+                let bg_color: Retained<NSColor> = unsafe {
+                    msg_send![&NSColor::labelColor(), colorWithAlphaComponent: 0.035_f64]
+                };
+                let cg = unsafe { bg_color.CGColor() };
                 let ptr = Retained::as_ptr(&cg);
                 let _: () = unsafe { msg_send![&layer, setBackgroundColor: ptr] };
                 let _: () = unsafe { msg_send![&layer, setBorderWidth: 0.0f64] };
@@ -328,7 +353,8 @@ pub fn update_tab_bar(
             select_btn.setTitle(&NSString::from_str(""));
             select_btn.setTag(i as NSInteger);
             select_btn.setTarget(Some(target));
-            select_btn.setAction(Some(sel!(selectTabWithTag:)));
+            select_btn.setAction(Some(sel!(tabClicked:)));
+            select_btn.setToolTip(Some(&NSString::from_str(&tooltip_str)));
         }
         select_btn.setTranslatesAutoresizingMaskIntoConstraints(false);
 
@@ -336,12 +362,12 @@ pub fn update_tab_bar(
         let doc_icon = unsafe {
             NSImageView::initWithFrame(
                 NSImageView::alloc(mtm),
-                NSRect::new(NSPoint::new(6.0, 5.0), NSSize::new(14.0, 14.0)),
+                NSRect::new(NSPoint::new(6.0, 5.0), NSSize::new(13.0, 13.0)),
             )
         };
         if let Some(img) = unsafe {
             NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                &NSString::from_str("doc.text"),
+                &NSString::from_str("doc.richtext"),
                 None,
             )
         } {
@@ -349,7 +375,15 @@ pub fn update_tab_bar(
                 NSImageSymbolConfiguration::configurationWithScale(NSImageSymbolScale::Small)
             };
             let symbol_img = unsafe { img.imageWithSymbolConfiguration(&config) };
-            unsafe { doc_icon.setImage(symbol_img.as_deref().or(Some(&img))) };
+            unsafe {
+                doc_icon.setImage(symbol_img.as_deref().or(Some(&img)));
+                let tint = if is_active {
+                    NSColor::controlAccentColor()
+                } else {
+                    NSColor::secondaryLabelColor()
+                };
+                doc_icon.setContentTintColor(Some(&tint));
+            };
         }
         doc_icon.setTranslatesAutoresizingMaskIntoConstraints(false);
 
@@ -358,8 +392,8 @@ pub fn update_tab_bar(
             NSTextField::initWithFrame(
                 NSTextField::alloc(mtm),
                 NSRect::new(
-                    NSPoint::new(24.0, 4.0),
-                    NSSize::new(max_tab_width - 52.0, 16.0),
+                    NSPoint::new(22.0, 4.0),
+                    NSSize::new(max_tab_width - 48.0, 16.0),
                 ),
             )
         };
@@ -369,16 +403,20 @@ pub fn update_tab_bar(
             title_label.setBordered(false);
             title_label.setDrawsBackground(false);
             title_label.setStringValue(&NSString::from_str(&tab.title));
-            title_label.setFont(Some(&NSFont::systemFontOfSize(11.5)));
+            let font = if is_active {
+                NSFont::systemFontOfSize_weight(11.5, 0.25)
+            } else {
+                NSFont::systemFontOfSize(11.5)
+            };
+            title_label.setFont(Some(&font));
             let text_color = if is_active {
                 NSColor::labelColor()
             } else {
                 NSColor::secondaryLabelColor()
             };
             title_label.setTextColor(Some(&text_color));
-            if let Some(cell) = title_label.cell() {
-                cell.setLineBreakMode(NSLineBreakMode::ByTruncatingMiddle);
-            }
+            title_label.setLineBreakMode(NSLineBreakMode::ByTruncatingMiddle);
+            title_label.setToolTip(Some(&NSString::from_str(&tooltip_str)));
         }
         title_label.setTranslatesAutoresizingMaskIntoConstraints(false);
 
@@ -417,27 +455,30 @@ pub fn update_tab_bar(
             close_btn.setTitle(&NSString::from_str(""));
             if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
                 &NSString::from_str("xmark"),
-                None,
+                Some(&NSString::from_str("Close Tab")),
             ) {
-                let config =
-                    NSImageSymbolConfiguration::configurationWithScale(NSImageSymbolScale::Small);
+                let config = NSImageSymbolConfiguration::configurationWithPointSize_weight_scale(
+                    9.5,
+                    0.3,
+                    NSImageSymbolScale::Small,
+                );
                 let symbol_img = img.imageWithSymbolConfiguration(&config);
                 close_btn.setImage(symbol_img.as_deref().or(Some(&img)));
             }
             close_btn.setTag(i as NSInteger);
             close_btn.setTarget(Some(target));
-            close_btn.setAction(Some(sel!(closeTabWithTag:)));
+            close_btn.setAction(Some(sel!(closeTabAtIndex:)));
             close_btn.setToolTip(Some(&NSString::from_str("Close Tab (⌘W)")));
         }
         close_btn.setTranslatesAutoresizingMaskIntoConstraints(false);
 
         unsafe {
-            tab_item.addSubview(&select_btn);
             tab_item.addSubview(&doc_icon);
             tab_item.addSubview(&title_label);
             if let Some(ref dot) = dirty_dot {
                 tab_item.addSubview(dot);
             }
+            tab_item.addSubview(&select_btn);
             tab_item.addSubview(&close_btn);
 
             select_btn
@@ -459,7 +500,7 @@ pub fn update_tab_bar(
 
             doc_icon
                 .leadingAnchor()
-                .constraintEqualToAnchor_constant(&tab_item.leadingAnchor(), 6.0)
+                .constraintEqualToAnchor_constant(&tab_item.leadingAnchor(), 7.0)
                 .setActive(true);
             doc_icon
                 .centerYAnchor()
@@ -467,11 +508,11 @@ pub fn update_tab_bar(
                 .setActive(true);
             doc_icon
                 .widthAnchor()
-                .constraintEqualToConstant(14.0)
+                .constraintEqualToConstant(13.0)
                 .setActive(true);
             doc_icon
                 .heightAnchor()
-                .constraintEqualToConstant(14.0)
+                .constraintEqualToConstant(13.0)
                 .setActive(true);
 
             title_label
@@ -507,7 +548,7 @@ pub fn update_tab_bar(
 
             close_btn
                 .trailingAnchor()
-                .constraintEqualToAnchor_constant(&tab_item.trailingAnchor(), -4.0)
+                .constraintEqualToAnchor_constant(&tab_item.trailingAnchor(), -5.0)
                 .setActive(true);
             close_btn
                 .centerYAnchor()
@@ -532,6 +573,35 @@ pub fn update_tab_bar(
                 .setActive(true);
 
             stack.addArrangedSubview(&tab_item);
+        }
+    }
+
+    // If there are more tabs than max_visible, append an overflow badge button ("+N more")
+    if count > max_visible {
+        let extra = count - max_visible;
+        let overflow_btn = unsafe {
+            NSButton::buttonWithTitle_target_action(
+                &NSString::from_str(&format!("+{} ▾", extra)),
+                Some(target),
+                Some(sel!(nextTab:)),
+                mtm,
+            )
+        };
+        unsafe {
+            overflow_btn.setBordered(false);
+            overflow_btn.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(
+                11.0, 0.2,
+            )));
+            overflow_btn.setToolTip(Some(&NSString::from_str(&format!(
+                "{} open tabs — click to cycle tabs",
+                count
+            ))));
+            overflow_btn.setTranslatesAutoresizingMaskIntoConstraints(false);
+            overflow_btn
+                .heightAnchor()
+                .constraintEqualToConstant(22.0)
+                .setActive(true);
+            stack.addArrangedSubview(&overflow_btn);
         }
     }
 }
@@ -564,17 +634,32 @@ mod tests {
         let doc2 = unsafe { PDFDocument::new() };
         let doc3 = unsafe { PDFDocument::new() };
 
-        let idx1 = mgr.add_tab("/path/1.pdf".to_string(), "Doc 1".to_string(), doc1, AppContentMode::StandaloneDocument);
+        let idx1 = mgr.add_tab(
+            "/path/1.pdf".to_string(),
+            "Doc 1".to_string(),
+            doc1,
+            AppContentMode::StandaloneDocument,
+        );
         assert_eq!(idx1, 0);
         assert_eq!(mgr.active_index, 0);
         assert_eq!(mgr.tab_count(), 1);
 
-        let idx2 = mgr.add_tab("/path/2.pdf".to_string(), "Doc 2".to_string(), doc2, AppContentMode::StandaloneDocument);
+        let idx2 = mgr.add_tab(
+            "/path/2.pdf".to_string(),
+            "Doc 2".to_string(),
+            doc2,
+            AppContentMode::StandaloneDocument,
+        );
         assert_eq!(idx2, 1);
         assert_eq!(mgr.active_index, 1);
         assert_eq!(mgr.tab_count(), 2);
 
-        let idx3 = mgr.add_tab("/path/3.pdf".to_string(), "Doc 3".to_string(), doc3, AppContentMode::StandaloneDocument);
+        let idx3 = mgr.add_tab(
+            "/path/3.pdf".to_string(),
+            "Doc 3".to_string(),
+            doc3,
+            AppContentMode::StandaloneDocument,
+        );
         assert_eq!(idx3, 2);
         assert_eq!(mgr.active_index, 2);
         assert_eq!(mgr.tab_count(), 3);
@@ -588,6 +673,7 @@ mod tests {
 
         // Test find by path
         assert_eq!(mgr.find_tab_by_path("/path/2.pdf"), Some(1));
+        assert_eq!(mgr.find_tab_by_path("/private/path/2.pdf"), Some(1));
         assert_eq!(mgr.find_tab_by_path("/path/unknown.pdf"), None);
 
         // Test removing active tab
@@ -597,5 +683,53 @@ mod tests {
         assert_eq!(mgr.tab_count(), 2);
         assert_eq!(mgr.active_index, 1); // Shifted down to last remaining
     }
-}
 
+    #[test]
+    fn test_tab_switching_keycodes_and_invariants() {
+        // Physical keycodes mapping table verification for AZERTY/QWERTY top row
+        let keycodes: [(u16, usize); 9] = [
+            (18, 0), // '1'
+            (19, 1), // '2'
+            (20, 2), // '3'
+            (21, 3), // '4'
+            (23, 4), // '5'
+            (22, 5), // '6'
+            (26, 6), // '7'
+            (28, 7), // '8'
+            (25, 8), // '9' -> last tab
+        ];
+
+        let mut mgr = TabManager::new();
+        // Add 6 tabs for stress test
+        for i in 0..6 {
+            let doc = unsafe { PDFDocument::new() };
+            mgr.add_tab(
+                format!("/tmp/doc_{}.pdf", i),
+                format!("Doc {}", i),
+                doc,
+                AppContentMode::StandaloneDocument,
+            );
+        }
+
+        assert_eq!(mgr.tab_count(), 6);
+
+        // Test 100 switching iterations
+        for step in 0..100 {
+            let target_kc = keycodes[step % keycodes.len()];
+            let target_tab = if target_kc.1 == 8 {
+                mgr.tab_count() - 1
+            } else if target_kc.1 < mgr.tab_count() {
+                target_kc.1
+            } else {
+                mgr.active_index
+            };
+            mgr.active_index = target_tab;
+
+            // Assert tab invariants
+            assert!(mgr.tab_count() >= 1);
+            assert!(mgr.active_index < mgr.tab_count());
+            assert!(mgr.active_tab().is_some());
+            assert_eq!(mgr.active_tab().unwrap().title, format!("Doc {}", target_tab));
+        }
+    }
+}

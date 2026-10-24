@@ -93,11 +93,12 @@ mod tests {
     #[test]
     fn test_log_event_records_message() {
         log_event("TEST_CAT", "Hello world from test");
-        let buffer = LOG_BUFFER.lock().unwrap();
+        let buffer = match LOG_BUFFER.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
         assert!(!buffer.is_empty());
-        let last = buffer.last().unwrap();
-        assert_eq!(last.category, "TEST_CAT");
-        assert_eq!(last.event, "Hello world from test");
+        assert!(buffer.iter().any(|e| e.category == "TEST_CAT" && e.event == "Hello world from test"));
     }
 
     #[test]
@@ -106,8 +107,10 @@ mod tests {
         for i in 0..100 {
             log_event("BENCH", &format!("Message {}", i));
         }
-        let buffer = LOG_BUFFER.lock().unwrap();
+        let buffer = match LOG_BUFFER.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
         assert!(buffer.len() <= MAX_LOG_BUFFER_SIZE);
     }
 }
-

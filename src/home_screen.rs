@@ -1,13 +1,13 @@
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{DeclaredClass, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSBezelStyle, NSButton, NSColor, NSFont, NSImage, NSImageView, NSLayoutConstraint, NSMenu,
-    NSMenuItem, NSResponder, NSScrollView, NSSearchField, NSSplitViewController, NSSplitViewItem,
+    NSButton, NSColor, NSFont, NSImage, NSImageView, NSLayoutConstraint, NSMenu, NSMenuItem,
+    NSResponder, NSScrollView, NSSearchField, NSSplitViewController, NSSplitViewItem, NSStackView,
     NSTableCellView, NSTableColumn, NSTableView, NSTableViewDataSource, NSTableViewDelegate,
-    NSTextField, NSUserInterfaceItemIdentification, NSView, NSViewController,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWorkspace,
+    NSTextField, NSUserInterfaceItemIdentification, NSUserInterfaceLayoutOrientation, NSView,
+    NSViewController, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
+    NSVisualEffectView, NSWorkspace,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSIndexSet, NSInteger, NSObjectProtocol, NSPoint, NSRect, NSSize,
@@ -41,6 +41,7 @@ pub struct HomeDelegateIvars {
     pub main_title_label: RefCell<Option<Retained<NSTextField>>>,
     pub main_subtitle_label: RefCell<Option<Retained<NSTextField>>>,
     pub empty_state_view: RefCell<Option<Retained<NSView>>>,
+    pub hover_coordinator: crate::glass_row::HoverCoordinator,
 }
 
 define_class!(
@@ -92,14 +93,15 @@ define_class!(
                             let tf = NSTextField::labelWithString(&NSString::from_str(""), mtm);
                             unsafe {
                                 tf.setTag(201);
-                                tf.setFont(Some(&NSFont::boldSystemFontOfSize(11.0)));
-                                tf.setTextColor(Some(&NSColor::tertiaryLabelColor()));
+                                tf.setFont(Some(&NSFont::systemFontOfSize_weight(11.0, 0.4)));
+                                tf.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                                tf.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
                                 tf.setTranslatesAutoresizingMaskIntoConstraints(false);
                                 new_cell.addSubview(&tf);
                                 NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
                                     &*tf.leadingAnchor().constraintEqualToAnchor_constant(&new_cell.leadingAnchor(), 10.0),
                                     &*tf.trailingAnchor().constraintEqualToAnchor_constant(&new_cell.trailingAnchor(), -8.0),
-                                    &*tf.centerYAnchor().constraintEqualToAnchor(&new_cell.centerYAnchor()),
+                                    &*tf.bottomAnchor().constraintEqualToAnchor_constant(&new_cell.bottomAnchor(), -3.0),
                                 ]));
                             }
                             new_cell
@@ -107,12 +109,15 @@ define_class!(
 
                         if let Some(tf) = unsafe { cell_view.viewWithTag(201) } {
                             let tf = unsafe { Retained::cast_unchecked::<NSTextField>(tf) };
-                            unsafe { tf.setStringValue(&NSString::from_str(&title)) };
+                            unsafe {
+                                tf.setStringValue(&NSString::from_str(&title));
+                                tf.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                            };
                         }
 
                         Retained::autorelease_ptr(unsafe { Retained::cast_unchecked::<AnyObject>(cell_view) })
                     }
-                    SidebarItem::Item(title, icon_name, _) => {
+                    SidebarItem::Item(title, icon_name, item_id) => {
                         let view_id = NSString::from_str("SidebarItemCell");
                         let cell = unsafe { table_view.makeViewWithIdentifier_owner(&view_id, Some(self)) };
                         let cell_view = if let Some(cell) = cell {
@@ -129,20 +134,23 @@ define_class!(
                             tf.setTag(203);
                             tf.setFont(Some(&NSFont::systemFontOfSize(13.0)));
                             tf.setTextColor(Some(&NSColor::labelColor()));
+                            tf.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
                             tf.setTranslatesAutoresizingMaskIntoConstraints(false);
 
                             unsafe {
+                                new_cell.setTextField(Some(&tf));
+                                new_cell.setImageView(Some(&img_view));
                                 new_cell.addSubview(&img_view);
                                 new_cell.addSubview(&tf);
 
                                 NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
                                     &*img_view.leadingAnchor().constraintEqualToAnchor_constant(&new_cell.leadingAnchor(), 8.0),
                                     &*img_view.centerYAnchor().constraintEqualToAnchor(&new_cell.centerYAnchor()),
-                                    &*img_view.widthAnchor().constraintEqualToConstant(18.0),
-                                    &*img_view.heightAnchor().constraintEqualToConstant(18.0),
+                                    &*img_view.widthAnchor().constraintEqualToConstant(16.0),
+                                    &*img_view.heightAnchor().constraintEqualToConstant(16.0),
 
-                                    &*tf.leadingAnchor().constraintEqualToAnchor_constant(&img_view.trailingAnchor(), 8.0),
-                                    &*tf.trailingAnchor().constraintEqualToAnchor_constant(&new_cell.trailingAnchor(), -8.0),
+                                    &*tf.leadingAnchor().constraintEqualToAnchor_constant(&img_view.trailingAnchor(), 7.0),
+                                    &*tf.trailingAnchor().constraintEqualToAnchor_constant(&new_cell.trailingAnchor(), -6.0),
                                     &*tf.centerYAnchor().constraintEqualToAnchor(&new_cell.centerYAnchor()),
                                 ]));
                             }
@@ -157,21 +165,26 @@ define_class!(
                             ) {
                                 unsafe {
                                     img_view.setImage(Some(&img));
-                                    img_view.setContentTintColor(Some(&NSColor::secondaryLabelColor()));
+                                    img_view.setContentTintColor(Some(&NSColor::controlAccentColor()));
                                 }
                             }
                         }
 
                         if let Some(tf) = unsafe { cell_view.viewWithTag(203) } {
                             let tf = unsafe { Retained::cast_unchecked::<NSTextField>(tf) };
-                            unsafe { tf.setStringValue(&NSString::from_str(&title)) };
+                            let tip = if item_id.starts_with('/') { &item_id } else { &title };
+                            unsafe {
+                                tf.setStringValue(&NSString::from_str(&title));
+                                tf.setToolTip(Some(&NSString::from_str(tip)));
+                                cell_view.setToolTip(Some(&NSString::from_str(tip)));
+                            };
                         }
 
                         Retained::autorelease_ptr(unsafe { Retained::cast_unchecked::<AnyObject>(cell_view) })
                     }
                 }
             } else {
-                // Main Table Cell
+                // Main Table Cell — Compact 44pt Finder/Books row
                 let items = self.ivars().main_items.borrow();
                 let item = match items.get(row as usize) {
                     Some(it) => it.clone(),
@@ -192,44 +205,66 @@ define_class!(
 
                     let title_tf = NSTextField::labelWithString(&NSString::from_str(""), mtm);
                     title_tf.setTag(102);
-                    title_tf.setFont(Some(&NSFont::boldSystemFontOfSize(13.5)));
+                    title_tf.setFont(Some(&NSFont::systemFontOfSize_weight(13.0, 0.25)));
                     title_tf.setTextColor(Some(&NSColor::labelColor()));
+                    title_tf.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
                     title_tf.setTranslatesAutoresizingMaskIntoConstraints(false);
 
                     let sub_tf = NSTextField::labelWithString(&NSString::from_str(""), mtm);
                     sub_tf.setTag(103);
                     sub_tf.setFont(Some(&NSFont::systemFontOfSize(11.0)));
                     sub_tf.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                    sub_tf.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingMiddle);
                     sub_tf.setTranslatesAutoresizingMaskIntoConstraints(false);
 
                     let badge_tf = NSTextField::labelWithString(&NSString::from_str(""), mtm);
                     badge_tf.setTag(104);
-                    badge_tf.setFont(Some(&NSFont::systemFontOfSize(11.0)));
-                    badge_tf.setTextColor(Some(&NSColor::tertiaryLabelColor()));
+                    badge_tf.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(11.0, 0.0)));
+                    badge_tf.setTextColor(Some(&NSColor::secondaryLabelColor()));
                     badge_tf.setTranslatesAutoresizingMaskIntoConstraints(false);
+                    badge_tf.setContentHuggingPriority_forOrientation(
+                        objc2_app_kit::NSLayoutPriorityRequired,
+                        objc2_app_kit::NSLayoutConstraintOrientation::Horizontal,
+                    );
+                    badge_tf.setContentCompressionResistancePriority_forOrientation(
+                        objc2_app_kit::NSLayoutPriorityRequired,
+                        objc2_app_kit::NSLayoutConstraintOrientation::Horizontal,
+                    );
+
+                    let star_view = NSImageView::new(mtm);
+                    star_view.setTag(105);
+                    star_view.setTranslatesAutoresizingMaskIntoConstraints(false);
 
                     unsafe {
+                        new_cell.setTextField(Some(&title_tf));
+                        new_cell.setImageView(Some(&img_view));
                         new_cell.addSubview(&img_view);
                         new_cell.addSubview(&title_tf);
                         new_cell.addSubview(&sub_tf);
                         new_cell.addSubview(&badge_tf);
+                        new_cell.addSubview(&star_view);
 
                         NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
-                            &*img_view.leadingAnchor().constraintEqualToAnchor_constant(&new_cell.leadingAnchor(), 16.0),
+                            &*img_view.leadingAnchor().constraintEqualToAnchor_constant(&new_cell.leadingAnchor(), 14.0),
                             &*img_view.centerYAnchor().constraintEqualToAnchor(&new_cell.centerYAnchor()),
-                            &*img_view.widthAnchor().constraintEqualToConstant(32.0),
-                            &*img_view.heightAnchor().constraintEqualToConstant(32.0),
+                            &*img_view.widthAnchor().constraintEqualToConstant(24.0),
+                            &*img_view.heightAnchor().constraintEqualToConstant(24.0),
 
-                            &*badge_tf.trailingAnchor().constraintEqualToAnchor_constant(&new_cell.trailingAnchor(), -20.0),
+                            &*star_view.trailingAnchor().constraintEqualToAnchor_constant(&new_cell.trailingAnchor(), -14.0),
+                            &*star_view.centerYAnchor().constraintEqualToAnchor(&new_cell.centerYAnchor()),
+                            &*star_view.widthAnchor().constraintEqualToConstant(14.0),
+                            &*star_view.heightAnchor().constraintEqualToConstant(14.0),
+
+                            &*badge_tf.trailingAnchor().constraintEqualToAnchor_constant(&star_view.leadingAnchor(), -8.0),
                             &*badge_tf.centerYAnchor().constraintEqualToAnchor(&new_cell.centerYAnchor()),
 
-                            &*title_tf.leadingAnchor().constraintEqualToAnchor_constant(&img_view.trailingAnchor(), 12.0),
-                            &*title_tf.topAnchor().constraintEqualToAnchor_constant(&new_cell.topAnchor(), 9.0),
-                            &*title_tf.trailingAnchor().constraintLessThanOrEqualToAnchor_constant(&badge_tf.leadingAnchor(), -12.0),
+                            &*title_tf.leadingAnchor().constraintEqualToAnchor_constant(&img_view.trailingAnchor(), 10.0),
+                            &*title_tf.topAnchor().constraintEqualToAnchor_constant(&new_cell.topAnchor(), 5.0),
+                            &*title_tf.trailingAnchor().constraintLessThanOrEqualToAnchor_constant(&badge_tf.leadingAnchor(), -10.0),
 
-                            &*sub_tf.leadingAnchor().constraintEqualToAnchor_constant(&img_view.trailingAnchor(), 12.0),
-                            &*sub_tf.topAnchor().constraintEqualToAnchor_constant(&title_tf.bottomAnchor(), 3.0),
-                            &*sub_tf.trailingAnchor().constraintLessThanOrEqualToAnchor_constant(&badge_tf.leadingAnchor(), -12.0),
+                            &*sub_tf.leadingAnchor().constraintEqualToAnchor_constant(&img_view.trailingAnchor(), 10.0),
+                            &*sub_tf.topAnchor().constraintEqualToAnchor_constant(&title_tf.bottomAnchor(), 1.5),
+                            &*sub_tf.trailingAnchor().constraintLessThanOrEqualToAnchor_constant(&badge_tf.leadingAnchor(), -10.0),
                         ]));
                     }
                     new_cell
@@ -240,20 +275,17 @@ define_class!(
                 // Icon
                 if let Some(img_view) = unsafe { cell_view.viewWithTag(101) } {
                     let img_view = unsafe { Retained::cast_unchecked::<NSImageView>(img_view) };
-                    let icon_name = if item.is_folder { "folder.fill" } else { "doc.richtext.fill" };
-                    if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                        &NSString::from_str(icon_name),
-                        None,
-                    ) {
-                        unsafe {
-                            img_view.setImage(Some(&img));
-                            let tint = if item.is_folder {
-                                NSColor::systemBlueColor()
-                            } else {
-                                NSColor::systemRedColor()
-                            };
-                            img_view.setContentTintColor(Some(&tint));
-                        }
+                    let ws = unsafe { NSWorkspace::sharedWorkspace() };
+                    let type_ident = if item.is_folder {
+                        objc2_foundation::ns_string!("public.folder")
+                    } else {
+                        objc2_foundation::ns_string!("pdf")
+                    };
+                    #[allow(deprecated)]
+                    let icon = unsafe { ws.iconForFileType(type_ident) };
+                    unsafe {
+                        img_view.setContentTintColor(None);
+                        img_view.setImage(Some(&icon));
                     }
                 }
 
@@ -262,6 +294,7 @@ define_class!(
                     let tf = unsafe { Retained::cast_unchecked::<NSTextField>(tf) };
                     unsafe {
                         tf.setStringValue(&NSString::from_str(&item.name));
+                        tf.setToolTip(Some(&NSString::from_str(&item.path)));
                         if exists {
                             tf.setTextColor(Some(&NSColor::labelColor()));
                         } else {
@@ -270,19 +303,32 @@ define_class!(
                     }
                 }
 
-                // Subtitle
+                // Subtitle (parent folder + file size if available)
                 if let Some(tf) = unsafe { cell_view.viewWithTag(103) } {
                     let tf = unsafe { Retained::cast_unchecked::<NSTextField>(tf) };
                     let home_dir = unsafe { objc2_foundation::NSHomeDirectory() }.to_string();
-                    let display_path = if item.path.starts_with(&home_dir) {
-                        format!("~{}", &item.path[home_dir.len()..])
+                    let parent_path = Path::new(&item.path)
+                        .parent()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| item.path.clone());
+                    let display_path = if parent_path.starts_with(&home_dir) {
+                        format!("~{}", &parent_path[home_dir.len()..])
                     } else {
-                        item.path.clone()
+                        parent_path
                     };
-                    let text = if exists {
-                        display_path
+                    let text = if !exists {
+                        format!("{} · Missing", display_path)
+                    } else if item.is_folder {
+                        format!("{} · Workspace Folder", display_path)
+                    } else if let Ok(meta) = std::fs::metadata(&item.path) {
+                        let kb = (meta.len() as f64 / 1024.0).max(1.0);
+                        if kb >= 1024.0 {
+                            format!("{} · {:.1} MB", display_path, kb / 1024.0)
+                        } else {
+                            format!("{} · {:.0} KB", display_path, kb)
+                        }
                     } else {
-                        format!("{} • Missing", display_path)
+                        display_path
                     };
                     unsafe {
                         tf.setStringValue(&NSString::from_str(&text));
@@ -290,11 +336,30 @@ define_class!(
                     }
                 }
 
-                // Badge
+                let is_fav = Self::is_favorite(&item.path);
+
+                // Star indicator
+                if let Some(sv) = unsafe { cell_view.viewWithTag(105) } {
+                    let sv = unsafe { Retained::cast_unchecked::<NSImageView>(sv) };
+                    if is_fav {
+                        if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                            &NSString::from_str("star.fill"),
+                            Some(&NSString::from_str("Favorite")),
+                        ) {
+                            unsafe {
+                                sv.setImage(Some(&img));
+                                sv.setContentTintColor(Some(&NSColor::systemYellowColor()));
+                                sv.setHidden(false);
+                            }
+                        }
+                    } else {
+                        unsafe { sv.setHidden(true) };
+                    }
+                }
+
+                // Reading progress badge (no redundant "PDF" or "★ PDF")
                 if let Some(tf) = unsafe { cell_view.viewWithTag(104) } {
                     let tf = unsafe { Retained::cast_unchecked::<NSTextField>(tf) };
-                    let is_fav = Self::is_favorite(&item.path);
-
                     let mut progress_info = None;
                     if !item.is_folder {
                         let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
@@ -316,31 +381,55 @@ define_class!(
                     }
 
                     let badge_text = if let Some((page, total, pct)) = progress_info {
-                        if is_fav {
-                            format!("★ p. {}/{} ({}%)", page, total, pct)
-                        } else {
-                            format!("p. {}/{} ({}%)", page, total, pct)
-                        }
-                    } else if is_fav {
-                        if item.is_folder { "★ Folder".to_string() } else { "★ PDF".to_string() }
+                        format!("p. {}/{} · {}%", page, total, pct)
                     } else {
-                        if item.is_folder { "Folder".to_string() } else { "PDF".to_string() }
+                        String::new()
                     };
 
                     unsafe {
                         tf.setStringValue(&NSString::from_str(&badge_text));
-                        if is_fav {
-                            tf.setTextColor(Some(&NSColor::systemYellowColor()));
-                        } else if progress_info.is_some() {
-                            tf.setTextColor(Some(&NSColor::systemBlueColor()));
-                        } else {
-                            tf.setTextColor(Some(&NSColor::tertiaryLabelColor()));
-                        }
+                        tf.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                        tf.setHidden(badge_text.is_empty());
                     }
                 }
 
                 Retained::autorelease_ptr(unsafe { Retained::cast_unchecked::<AnyObject>(cell_view) })
             }
+        }
+
+        #[unsafe(method(tableDidScroll:))]
+        fn table_did_scroll(&self, _notification: &objc2_foundation::NSNotification) {
+            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                self.ivars().hover_coordinator.update_hover(table);
+            }
+        }
+
+        #[unsafe(method(mouseMoved:))]
+        fn mouse_moved(&self, _event: &objc2_app_kit::NSEvent) {
+            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                self.ivars().hover_coordinator.update_hover(table);
+            }
+        }
+
+        #[unsafe(method(mouseExited:))]
+        fn mouse_exited(&self, _event: &objc2_app_kit::NSEvent) {
+            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                self.ivars().hover_coordinator.clear_hover(table);
+            }
+        }
+
+        #[unsafe(method(tableView:rowViewForRow:))]
+        fn table_view_row_view_for_row(
+            &self,
+            _table_view: &NSTableView,
+            row: NSInteger,
+        ) -> *mut AnyObject {
+            let mtm = MainThreadMarker::from(self);
+            let row_view = crate::glass_row::GlassTableRowView::new(mtm);
+            if self.ivars().hover_coordinator.hovered_row() == Some(row) {
+                row_view.set_hovered(true);
+            }
+            Retained::autorelease_ptr(unsafe { Retained::cast_unchecked::<AnyObject>(row_view) })
         }
 
         #[unsafe(method(tableView:isGroupRow:))]
@@ -413,6 +502,59 @@ define_class!(
             }
         }
 
+        #[unsafe(method(control:textView:doCommandBySelector:))]
+        fn control_text_view_do_command_by_selector(
+            &self,
+            _control: &objc2_app_kit::NSControl,
+            _text_view: &objc2_app_kit::NSTextView,
+            command_selector: objc2::runtime::Sel,
+        ) -> bool {
+            let sel_name = command_selector.name().to_bytes();
+            let mut handled = false;
+            if sel_name == b"insertNewline:" {
+                if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                    let mut row = unsafe { table.selectedRow() };
+                    let count = self.ivars().main_items.borrow().len() as isize;
+                    if row < 0 && count > 0 {
+                        row = 0;
+                    }
+                    if row >= 0 {
+                        self.open_main_row(row);
+                        handled = true;
+                    }
+                }
+            } else if sel_name == b"moveDown:" {
+                if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                    let count = self.ivars().main_items.borrow().len() as isize;
+                    if count > 0 {
+                        let cur = unsafe { table.selectedRow() };
+                        let next = if cur < 0 || cur >= count - 1 { 0 } else { cur + 1 };
+                        let idx_set = unsafe { NSIndexSet::indexSetWithIndex(next as usize) };
+                        unsafe {
+                            table.selectRowIndexes_byExtendingSelection(&idx_set, false);
+                            table.scrollRowToVisible(next);
+                        }
+                        handled = true;
+                    }
+                }
+            } else if sel_name == b"moveUp:" {
+                if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                    let count = self.ivars().main_items.borrow().len() as isize;
+                    if count > 0 {
+                        let cur = unsafe { table.selectedRow() };
+                        let next = if cur <= 0 { count - 1 } else { cur - 1 };
+                        let idx_set = unsafe { NSIndexSet::indexSetWithIndex(next as usize) };
+                        unsafe {
+                            table.selectRowIndexes_byExtendingSelection(&idx_set, false);
+                            table.scrollRowToVisible(next);
+                        }
+                        handled = true;
+                    }
+                }
+            }
+            handled
+        }
+
         #[unsafe(method(openPdf:))]
         fn open_pdf(&self, _sender: Option<&AnyObject>) {
             let mtm = MainThreadMarker::from(self);
@@ -432,85 +574,57 @@ define_class!(
         #[unsafe(method(mainTableDoubleClicked:))]
         fn main_table_double_clicked(&self, sender: &AnyObject) {
             let table_view: *mut NSTableView = sender as *const AnyObject as *mut NSTableView;
-            let row = unsafe { (*table_view).clickedRow() };
-            if row >= 0 {
-                let items = self.ivars().main_items.borrow();
-                if let Some(item) = items.get(row as usize) {
-                    let path = item.path.clone();
-                    drop(items);
-
-                    let mtm = MainThreadMarker::from(self);
-                    if let Some(app) = unsafe { objc2_app_kit::NSApplication::sharedApplication(mtm).delegate() } {
-                        let ns_path = NSString::from_str(&path);
-                        let _: () = unsafe { msg_send![&*app, openPathString: &*ns_path] };
-                    }
-                }
-            }
+            let clicked = unsafe { (*table_view).clickedRow() };
+            let row = if clicked >= 0 {
+                clicked
+            } else {
+                unsafe { (*table_view).selectedRow() }
+            };
+            self.open_main_row(row);
         }
 
         #[unsafe(method(contextOpen:))]
         fn context_open(&self, _sender: &AnyObject) {
-            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
-                let row = unsafe { table.clickedRow() };
-                if row >= 0 {
-                    let items = self.ivars().main_items.borrow();
-                    if let Some(item) = items.get(row as usize) {
-                        let path = item.path.clone();
-                        drop(items);
-                        let mtm = MainThreadMarker::from(self);
-                        if let Some(app) = unsafe { objc2_app_kit::NSApplication::sharedApplication(mtm).delegate() } {
-                            let ns_path = NSString::from_str(&path);
-                            let _: () = unsafe { msg_send![&*app, openPathString: &*ns_path] };
-                        }
-                    }
-                }
+            if let Some(row) = self.active_main_table_row() {
+                self.open_main_row(row);
             }
         }
 
         #[unsafe(method(contextShowInFinder:))]
         fn context_show_in_finder(&self, _sender: &AnyObject) {
-            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
-                let row = unsafe { table.clickedRow() };
-                if row >= 0 {
-                    let items = self.ivars().main_items.borrow();
-                    if let Some(item) = items.get(row as usize) {
-                        let ws = unsafe { NSWorkspace::sharedWorkspace() };
-                        let url = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&item.path)) };
-                        let urls = NSArray::from_slice(&[&*url]);
-                        unsafe { ws.activateFileViewerSelectingURLs(&urls) };
-                    }
+            if let Some(row) = self.active_main_table_row() {
+                let items = self.ivars().main_items.borrow();
+                if let Some(item) = items.get(row as usize) {
+                    let ws = unsafe { NSWorkspace::sharedWorkspace() };
+                    let url = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&item.path)) };
+                    let urls = NSArray::from_slice(&[&*url]);
+                    unsafe { ws.activateFileViewerSelectingURLs(&urls) };
                 }
             }
         }
 
         #[unsafe(method(contextToggleFavorite:))]
         fn context_toggle_favorite(&self, _sender: &AnyObject) {
-            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
-                let row = unsafe { table.clickedRow() };
-                if row >= 0 {
-                    let items = self.ivars().main_items.borrow();
-                    if let Some(item) = items.get(row as usize) {
-                        let path = item.path.clone();
-                        drop(items);
-                        Self::toggle_favorite(&path);
-                        self.refresh_current_view();
-                    }
+            if let Some(row) = self.active_main_table_row() {
+                let items = self.ivars().main_items.borrow();
+                if let Some(item) = items.get(row as usize) {
+                    let path = item.path.clone();
+                    drop(items);
+                    Self::toggle_favorite(&path);
+                    self.refresh_current_view();
                 }
             }
         }
 
         #[unsafe(method(contextRemoveRecent:))]
         fn context_remove_recent(&self, _sender: &AnyObject) {
-            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
-                let row = unsafe { table.clickedRow() };
-                if row >= 0 {
-                    let items = self.ivars().main_items.borrow();
-                    if let Some(item) = items.get(row as usize) {
-                        let path = item.path.clone();
-                        drop(items);
-                        Self::remove_from_recents(&path);
-                        self.refresh_current_view();
-                    }
+            if let Some(row) = self.active_main_table_row() {
+                let items = self.ivars().main_items.borrow();
+                if let Some(item) = items.get(row as usize) {
+                    let path = item.path.clone();
+                    drop(items);
+                    Self::remove_from_recents(&path);
+                    self.refresh_current_view();
                 }
             }
         }
@@ -533,6 +647,93 @@ impl HomeDelegate {
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(HomeDelegateIvars::default());
         unsafe { msg_send![super(this), init] }
+    }
+
+    fn active_main_table_row(&self) -> Option<isize> {
+        let table = self.ivars().main_table.borrow();
+        let table = table.as_ref()?;
+        let clicked = unsafe { table.clickedRow() };
+        if clicked >= 0 {
+            return Some(clicked);
+        }
+        let selected = unsafe { table.selectedRow() };
+        if selected >= 0 { Some(selected) } else { None }
+    }
+
+    fn open_main_row(&self, row: isize) {
+        if row < 0 {
+            return;
+        }
+        let items = self.ivars().main_items.borrow();
+        if let Some(item) = items.get(row as usize) {
+            let path = item.path.clone();
+            drop(items);
+
+            let mtm = MainThreadMarker::from(self);
+            if let Some(app) =
+                unsafe { objc2_app_kit::NSApplication::sharedApplication(mtm).delegate() }
+            {
+                let ns_path = NSString::from_str(&path);
+                let _: () = unsafe { msg_send![&*app, openPathString: &*ns_path] };
+            }
+        }
+    }
+
+    pub fn build_sidebar_items() -> Vec<SidebarItem> {
+        let mut sidebar_items = vec![
+            SidebarItem::Header("".to_string()),
+            SidebarItem::Item("Home".to_string(), "house".to_string(), "home".to_string()),
+            SidebarItem::Item(
+                "Continue Reading".to_string(),
+                "book.closed.fill".to_string(),
+                "continue_reading".to_string(),
+            ),
+            SidebarItem::Item(
+                "Recent".to_string(),
+                "clock".to_string(),
+                "recent".to_string(),
+            ),
+            SidebarItem::Item(
+                "Favorites".to_string(),
+                "star".to_string(),
+                "favorites".to_string(),
+            ),
+            SidebarItem::Header("LOCATIONS".to_string()),
+            SidebarItem::Item(
+                "Local Files".to_string(),
+                "folder".to_string(),
+                "local".to_string(),
+            ),
+            SidebarItem::Item(
+                "iCloud Drive".to_string(),
+                "icloud".to_string(),
+                "icloud".to_string(),
+            ),
+            SidebarItem::Header("WORKSPACES".to_string()),
+        ];
+
+        let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
+        if let Some(workspaces) =
+            unsafe { defaults.arrayForKey(&NSString::from_str("RecentWorkspaces")) }
+        {
+            let mut seen = std::collections::HashSet::new();
+            for i in 0..workspaces.count() {
+                let raw_path = unsafe {
+                    Retained::cast_unchecked::<NSString>(workspaces.objectAtIndex(i).clone())
+                }
+                .to_string();
+                let path = crate::bookmarks::normalize_bookmark_path(&raw_path);
+                if seen.insert(path.clone()) {
+                    let name = PathBuf::from(&path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    sidebar_items.push(SidebarItem::Item(name, "folder".to_string(), path));
+                }
+            }
+        }
+        sidebar_items
     }
 
     pub fn update_main_area_for_sidebar_selection(&self, item: &SidebarItem) {
@@ -564,24 +765,28 @@ impl HomeDelegate {
                             .or_else(|| defaults.arrayForKey(&key2))
                     };
                     if let Some(recents) = recents {
+                        let mut seen = std::collections::HashSet::new();
                         for i in 0..recents.count() {
-                            let path = unsafe {
+                            let raw_path = unsafe {
                                 Retained::cast_unchecked::<NSString>(
                                     recents.objectAtIndex(i).clone(),
                                 )
                             }
                             .to_string();
-                            let is_folder = Path::new(&path).is_dir();
-                            let name = PathBuf::from(&path)
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string();
-                            new_items.push(MainAreaItem {
-                                name,
-                                path,
-                                is_folder,
-                            });
+                            let path = crate::bookmarks::normalize_bookmark_path(&raw_path);
+                            if seen.insert(path.clone()) {
+                                let is_folder = Path::new(&path).is_dir();
+                                let name = PathBuf::from(&path)
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string();
+                                new_items.push(MainAreaItem {
+                                    name,
+                                    path,
+                                    is_folder,
+                                });
+                            }
                         }
                     }
                 } else if id == "continue_reading" {
@@ -606,27 +811,36 @@ impl HomeDelegate {
                             .or_else(|| defaults.arrayForKey(&key2))
                     };
                     if let Some(recents) = recents {
+                        let mut seen = std::collections::HashSet::new();
                         for i in 0..recents.count() {
-                            let path = unsafe {
+                            let raw_path = unsafe {
                                 Retained::cast_unchecked::<NSString>(
                                     recents.objectAtIndex(i).clone(),
                                 )
                             }
                             .to_string();
-                            let is_folder = Path::new(&path).is_dir();
-                            if !is_folder {
-                                let key_pos = NSString::from_str(&format!("PDFPos_{}", path));
-                                if unsafe { defaults.dictionaryForKey(&key_pos) }.is_some() {
-                                    let name = PathBuf::from(&path)
-                                        .file_name()
-                                        .unwrap_or_default()
-                                        .to_string_lossy()
-                                        .to_string();
-                                    new_items.push(MainAreaItem {
-                                        name,
-                                        path,
-                                        is_folder,
-                                    });
+                            let path = crate::bookmarks::normalize_bookmark_path(&raw_path);
+                            if seen.insert(path.clone()) {
+                                let is_folder = Path::new(&path).is_dir();
+                                if !is_folder {
+                                    let key_pos = NSString::from_str(&format!("PDFPos_{}", path));
+                                    let key_raw =
+                                        NSString::from_str(&format!("PDFPos_{}", raw_path));
+                                    if unsafe {
+                                        defaults.dictionaryForKey(&key_pos).is_some()
+                                            || defaults.dictionaryForKey(&key_raw).is_some()
+                                    } {
+                                        let name = PathBuf::from(&path)
+                                            .file_name()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                            .to_string();
+                                        new_items.push(MainAreaItem {
+                                            name,
+                                            path,
+                                            is_folder,
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -645,22 +859,26 @@ impl HomeDelegate {
                     let favs =
                         unsafe { defaults.arrayForKey(&NSString::from_str("FavoriteFiles")) };
                     if let Some(favs) = favs {
+                        let mut seen = std::collections::HashSet::new();
                         for i in 0..favs.count() {
-                            let path = unsafe {
+                            let raw_path = unsafe {
                                 Retained::cast_unchecked::<NSString>(favs.objectAtIndex(i).clone())
                             }
                             .to_string();
-                            let is_folder = Path::new(&path).is_dir();
-                            let name = PathBuf::from(&path)
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string();
-                            new_items.push(MainAreaItem {
-                                name,
-                                path,
-                                is_folder,
-                            });
+                            let path = crate::bookmarks::normalize_bookmark_path(&raw_path);
+                            if seen.insert(path.clone()) {
+                                let is_folder = Path::new(&path).is_dir();
+                                let name = PathBuf::from(&path)
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string();
+                                new_items.push(MainAreaItem {
+                                    name,
+                                    path,
+                                    is_folder,
+                                });
+                            }
                         }
                     }
                 } else if id == "local" {
@@ -711,6 +929,10 @@ impl HomeDelegate {
     }
 
     fn load_directory_items(dir_path: &str, items: &mut Vec<MainAreaItem>) {
+        let show_hidden = crate::settings::SettingsManager::bool_pref(
+            crate::settings::PREF_SHOW_HIDDEN_FILES,
+            false,
+        );
         if let Ok(entries) = std::fs::read_dir(dir_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -725,7 +947,7 @@ impl HomeDelegate {
                         .unwrap_or_default()
                         .to_string_lossy()
                         .to_string();
-                    if !name.starts_with('.') {
+                    if name != ".DS_Store" && (show_hidden || !name.starts_with('.')) {
                         items.push(MainAreaItem {
                             name,
                             path: path.to_string_lossy().to_string(),
@@ -739,20 +961,36 @@ impl HomeDelegate {
 
     pub fn refresh_current_view(&self) {
         let current_id = self.ivars().current_sidebar_id.borrow().clone();
-        let items = self.ivars().sidebar_items.borrow();
-        for item in items.iter() {
+        let rebuilt = Self::build_sidebar_items();
+        *self.ivars().sidebar_items.borrow_mut() = rebuilt.clone();
+        if let Some(st) = self.ivars().sidebar_table.borrow().as_ref() {
+            unsafe { st.reloadData() };
+        }
+
+        for (idx, item) in rebuilt.iter().enumerate() {
             if let SidebarItem::Item(_, _, id) = item {
                 if id == &current_id {
-                    let item_clone = item.clone();
-                    drop(items);
-                    self.update_main_area_for_sidebar_selection(&item_clone);
+                    if let Some(st) = self.ivars().sidebar_table.borrow().as_ref() {
+                        let index_set = unsafe { NSIndexSet::indexSetWithIndex(idx) };
+                        unsafe { st.selectRowIndexes_byExtendingSelection(&index_set, false) };
+                    }
+                    self.update_main_area_for_sidebar_selection(item);
                     return;
                 }
             }
         }
+
+        if let Some(first) = rebuilt.get(1) {
+            self.update_main_area_for_sidebar_selection(first);
+        }
+    }
+
+    fn norm_path(path: &str) -> String {
+        path.strip_prefix("/private").unwrap_or(path).to_string()
     }
 
     pub fn is_favorite(path: &str) -> bool {
+        let target = Self::norm_path(path);
         let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
         let key = NSString::from_str("FavoriteFiles");
         if let Some(existing) = unsafe { defaults.arrayForKey(&key) } {
@@ -761,7 +999,7 @@ impl HomeDelegate {
                     Retained::cast_unchecked::<NSString>(existing.objectAtIndex(i).clone())
                 }
                 .to_string();
-                if s == path {
+                if Self::norm_path(&s) == target {
                     return true;
                 }
             }
@@ -770,6 +1008,7 @@ impl HomeDelegate {
     }
 
     pub fn toggle_favorite(path: &str) {
+        let target = Self::norm_path(path);
         let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
         let key = NSString::from_str("FavoriteFiles");
         let existing = unsafe { defaults.arrayForKey(&key) };
@@ -781,7 +1020,7 @@ impl HomeDelegate {
                     Retained::cast_unchecked::<NSString>(existing.objectAtIndex(i).clone())
                 }
                 .to_string();
-                if s == path {
+                if Self::norm_path(&s) == target {
                     exists = true;
                 } else {
                     arr.push(s);
@@ -798,6 +1037,7 @@ impl HomeDelegate {
     }
 
     pub fn remove_from_recents(path: &str) {
+        let target = Self::norm_path(path);
         let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
         let key1 = NSString::from_str("RecentFiles");
         let key2 = NSString::from_str("RecentItems");
@@ -811,7 +1051,7 @@ impl HomeDelegate {
                         Retained::cast_unchecked::<NSString>(existing.objectAtIndex(i).clone())
                     }
                     .to_string();
-                    if s != path {
+                    if Self::norm_path(&s) != target {
                         arr.push(s);
                     }
                 }
@@ -843,56 +1083,7 @@ impl HomeScreen {
         let split_vc = NSSplitViewController::new(mtm);
         let delegate = HomeDelegate::new(mtm);
 
-        let mut sidebar_items = vec![
-            SidebarItem::Header("".to_string()),
-            SidebarItem::Item("Home".to_string(), "house".to_string(), "home".to_string()),
-            SidebarItem::Item(
-                "Continue Reading".to_string(),
-                "book.closed.fill".to_string(),
-                "continue_reading".to_string(),
-            ),
-            SidebarItem::Item(
-                "Recent".to_string(),
-                "clock".to_string(),
-                "recent".to_string(),
-            ),
-            SidebarItem::Item(
-                "Favorites".to_string(),
-                "star".to_string(),
-                "favorites".to_string(),
-            ),
-            SidebarItem::Header("LOCATIONS".to_string()),
-            SidebarItem::Item(
-                "Local Files".to_string(),
-                "folder".to_string(),
-                "local".to_string(),
-            ),
-            SidebarItem::Item(
-                "iCloud Drive".to_string(),
-                "icloud".to_string(),
-                "icloud".to_string(),
-            ),
-            SidebarItem::Header("WORKSPACES".to_string()),
-        ];
-
-        let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
-        if let Some(workspaces) =
-            unsafe { defaults.arrayForKey(&NSString::from_str("RecentWorkspaces")) }
-        {
-            for i in 0..workspaces.count() {
-                let path = unsafe {
-                    Retained::cast_unchecked::<NSString>(workspaces.objectAtIndex(i).clone())
-                }
-                .to_string();
-                let name = PathBuf::from(&path)
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                sidebar_items.push(SidebarItem::Item(name, "folder".to_string(), path));
-            }
-        }
-
+        let sidebar_items = HomeDelegate::build_sidebar_items();
         *delegate.ivars().sidebar_items.borrow_mut() = sidebar_items.clone();
 
         // 1. LEFT SIDEBAR
@@ -906,14 +1097,12 @@ impl HomeScreen {
                 NSTableColumn::alloc(mtm),
                 &NSString::from_str("SidebarCol"),
             );
-            col.setWidth(200.0);
+            col.setWidth(190.0);
             left_table.addTableColumn(&col);
             left_table.setHeaderView(None);
-            left_table.setSelectionHighlightStyle(
-                objc2_app_kit::NSTableViewSelectionHighlightStyle::SourceList,
-            );
+            let _: () = msg_send![&left_table, setStyle: 1usize];
             left_table.setRowHeight(28.0);
-            left_table.setIntercellSpacing(NSSize::new(4.0, 2.0));
+            left_table.setIntercellSpacing(NSSize::new(4.0, 1.0));
             left_table.setBackgroundColor(&NSColor::clearColor());
 
             let del_ptr: *const HomeDelegate = &*delegate;
@@ -926,7 +1115,7 @@ impl HomeScreen {
 
             let left_effect = NSVisualEffectView::initWithFrame(
                 NSVisualEffectView::alloc(mtm),
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(220.0, 700.0)),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(195.0, 700.0)),
             );
             left_effect.setMaterial(NSVisualEffectMaterial::Sidebar);
             left_effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
@@ -935,7 +1124,7 @@ impl HomeScreen {
             left_effect.addSubview(&left_scroll);
             left_scroll
                 .topAnchor()
-                .constraintEqualToAnchor_constant(&left_effect.topAnchor(), 32.0)
+                .constraintEqualToAnchor_constant(&left_effect.topAnchor(), 28.0)
                 .setActive(true);
             left_scroll
                 .bottomAnchor()
@@ -957,8 +1146,8 @@ impl HomeScreen {
         let left_item = unsafe { NSSplitViewItem::sidebarWithViewController(&left_vc) };
         unsafe {
             left_item.setCanCollapse(false);
-            left_item.setMinimumThickness(180.0);
-            left_item.setMaximumThickness(260.0);
+            left_item.setMinimumThickness(175.0);
+            left_item.setMaximumThickness(230.0);
             left_item.setHoldingPriority(750.0);
         }
 
@@ -974,7 +1163,7 @@ impl HomeScreen {
         let title_label =
             NSTextField::labelWithString(&NSString::from_str("Recent Documents"), mtm);
         unsafe {
-            title_label.setFont(Some(&NSFont::boldSystemFontOfSize(22.0)));
+            title_label.setFont(Some(&NSFont::systemFontOfSize_weight(19.0, 0.35)));
             title_label.setTextColor(Some(&NSColor::labelColor()));
             title_label.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
             title_label.setTranslatesAutoresizingMaskIntoConstraints(false);
@@ -1002,89 +1191,90 @@ impl HomeScreen {
 
         let open_pdf_btn = unsafe {
             let btn = NSButton::buttonWithTitle_target_action(
-                &NSString::from_str("Open PDF..."),
+                &NSString::from_str("Open PDF…"),
                 Some(target_any),
                 Some(sel!(openPdf:)),
                 mtm,
             );
-            btn.setBezelStyle(NSBezelStyle::Rounded);
+            let _: () = msg_send![&btn, setBezelStyle: 1usize];
+            if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                &NSString::from_str("doc.badge.plus"),
+                None,
+            ) {
+                btn.setImage(Some(&img));
+                let _: () = msg_send![&btn, setImagePosition: 2usize];
+            }
             btn
         };
         let open_folder_btn = unsafe {
             let btn = NSButton::buttonWithTitle_target_action(
-                &NSString::from_str("Open Folder..."),
+                &NSString::from_str("Open Folder…"),
                 Some(target_any),
                 Some(sel!(openFolder:)),
                 mtm,
             );
-            btn.setBezelStyle(NSBezelStyle::Rounded);
+            let _: () = msg_send![&btn, setBezelStyle: 1usize];
+            if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                &NSString::from_str("folder.badge.plus"),
+                None,
+            ) {
+                btn.setImage(Some(&img));
+                let _: () = msg_send![&btn, setImagePosition: 2usize];
+            }
             btn
+        };
+
+        let action_stack = unsafe {
+            let stack = NSStackView::new(mtm);
+            stack.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
+            stack.setSpacing(11.0);
+            stack.setDistribution(objc2_app_kit::NSStackViewDistribution::Fill);
+            stack.setAlignment(objc2_app_kit::NSLayoutAttribute::CenterY);
+            stack.setTranslatesAutoresizingMaskIntoConstraints(false);
+            stack.addArrangedSubview(&open_folder_btn);
+            stack.addArrangedSubview(&open_pdf_btn);
+            stack
         };
 
         unsafe {
             open_pdf_btn.setTranslatesAutoresizingMaskIntoConstraints(false);
             open_folder_btn.setTranslatesAutoresizingMaskIntoConstraints(false);
 
-            open_pdf_btn.setContentHuggingPriority_forOrientation(
-                objc2_app_kit::NSLayoutPriorityRequired,
-                objc2_app_kit::NSLayoutConstraintOrientation::Horizontal,
-            );
-            open_pdf_btn.setContentCompressionResistancePriority_forOrientation(
-                objc2_app_kit::NSLayoutPriorityRequired,
-                objc2_app_kit::NSLayoutConstraintOrientation::Horizontal,
-            );
-
-            open_folder_btn.setContentHuggingPriority_forOrientation(
-                objc2_app_kit::NSLayoutPriorityRequired,
-                objc2_app_kit::NSLayoutConstraintOrientation::Horizontal,
-            );
-            open_folder_btn.setContentCompressionResistancePriority_forOrientation(
-                objc2_app_kit::NSLayoutPriorityRequired,
-                objc2_app_kit::NSLayoutConstraintOrientation::Horizontal,
-            );
-
             header_view.addSubview(&search_field);
-            header_view.addSubview(&open_pdf_btn);
-            header_view.addSubview(&open_folder_btn);
+            header_view.addSubview(&action_stack);
 
             NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
                 &*title_label
                     .leadingAnchor()
-                    .constraintEqualToAnchor_constant(&header_view.leadingAnchor(), 24.0),
+                    .constraintEqualToAnchor_constant(&header_view.leadingAnchor(), 20.0),
                 &*title_label
                     .topAnchor()
                     .constraintEqualToAnchor_constant(&header_view.topAnchor(), 8.0),
                 &*search_field
                     .trailingAnchor()
-                    .constraintEqualToAnchor_constant(&header_view.trailingAnchor(), -24.0),
+                    .constraintEqualToAnchor_constant(&header_view.trailingAnchor(), -20.0),
                 &*search_field
                     .centerYAnchor()
                     .constraintEqualToAnchor(&title_label.centerYAnchor()),
-                &*search_field.widthAnchor().constraintEqualToConstant(140.0),
+                &*search_field.widthAnchor().constraintEqualToConstant(180.0),
                 &*subtitle_label
                     .leadingAnchor()
-                    .constraintEqualToAnchor_constant(&header_view.leadingAnchor(), 24.0),
+                    .constraintEqualToAnchor_constant(&header_view.leadingAnchor(), 20.0),
                 &*subtitle_label
                     .topAnchor()
-                    .constraintEqualToAnchor_constant(&title_label.bottomAnchor(), 8.0),
-                &*open_pdf_btn
+                    .constraintEqualToAnchor_constant(&title_label.bottomAnchor(), 4.0),
+                &*action_stack
                     .trailingAnchor()
-                    .constraintEqualToAnchor_constant(&header_view.trailingAnchor(), -24.0),
-                &*open_pdf_btn
+                    .constraintEqualToAnchor_constant(&header_view.trailingAnchor(), -20.0),
+                &*action_stack
                     .centerYAnchor()
                     .constraintEqualToAnchor(&subtitle_label.centerYAnchor()),
-                &*open_pdf_btn
-                    .widthAnchor()
-                    .constraintGreaterThanOrEqualToConstant(88.0),
-                &*open_folder_btn
-                    .trailingAnchor()
-                    .constraintEqualToAnchor_constant(&open_pdf_btn.leadingAnchor(), -8.0),
-                &*open_folder_btn
-                    .centerYAnchor()
-                    .constraintEqualToAnchor(&subtitle_label.centerYAnchor()),
-                &*open_folder_btn
-                    .widthAnchor()
-                    .constraintGreaterThanOrEqualToConstant(104.0),
+                &*action_stack
+                    .leadingAnchor()
+                    .constraintGreaterThanOrEqualToAnchor_constant(&subtitle_label.trailingAnchor(), 16.0),
+                &*action_stack
+                    .topAnchor()
+                    .constraintGreaterThanOrEqualToAnchor_constant(&search_field.bottomAnchor(), 6.0),
             ]));
         }
 
@@ -1112,9 +1302,13 @@ impl HomeScreen {
             main_col.setWidth(600.0);
             right_table.addTableColumn(&main_col);
             right_table.setHeaderView(None);
-            right_table.setRowHeight(54.0);
+            right_table.setRowHeight(44.0);
             right_table.setIntercellSpacing(NSSize::new(0.0, 2.0));
             right_table.setBackgroundColor(&NSColor::clearColor());
+            right_table.setSelectionHighlightStyle(
+                objc2_app_kit::NSTableViewSelectionHighlightStyle::Regular,
+            );
+            let _: () = msg_send![&right_table, setStyle: 2usize];
 
             let del_ptr: *const HomeDelegate = &*delegate;
             let _: () = msg_send![&right_table, setDelegate: del_ptr];
@@ -1176,6 +1370,29 @@ impl HomeScreen {
             right_scroll.setDocumentView(Some(&right_table));
             right_scroll.setHasVerticalScroller(true);
             right_scroll.setDrawsBackground(false);
+
+            let ta_opts: usize = 0x01 | 0x02 | 0x80 | 0x200;
+            let ta_alloc: *mut AnyObject = msg_send![objc2::class!(NSTrackingArea), alloc];
+            let ta: *mut AnyObject = msg_send![
+                ta_alloc,
+                initWithRect: right_table.bounds(),
+                options: ta_opts,
+                owner: &*delegate,
+                userInfo: std::ptr::null::<AnyObject>()
+            ];
+            if !ta.is_null() {
+                let _: () = msg_send![&right_table, addTrackingArea: ta];
+            }
+
+            let clip = right_scroll.contentView();
+            clip.setPostsBoundsChangedNotifications(true);
+            let nc = objc2_foundation::NSNotificationCenter::defaultCenter();
+            nc.addObserver_selector_name_object(
+                &*delegate,
+                sel!(tableDidScroll:),
+                Some(objc2_foundation::ns_string!("NSViewBoundsDidChangeNotification")),
+                Some(&clip),
+            );
         }
 
         // Empty State View
@@ -1247,14 +1464,14 @@ impl HomeScreen {
             NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
                 &*header_view
                     .topAnchor()
-                    .constraintEqualToAnchor_constant(&right_container.topAnchor(), 28.0),
+                    .constraintEqualToAnchor_constant(&right_container.topAnchor(), 16.0),
                 &*header_view
                     .leadingAnchor()
                     .constraintEqualToAnchor(&right_container.leadingAnchor()),
                 &*header_view
                     .trailingAnchor()
                     .constraintEqualToAnchor(&right_container.trailingAnchor()),
-                &*header_view.heightAnchor().constraintEqualToConstant(72.0),
+                &*header_view.heightAnchor().constraintEqualToConstant(62.0),
                 &*separator
                     .topAnchor()
                     .constraintEqualToAnchor(&header_view.bottomAnchor()),
@@ -1291,7 +1508,35 @@ impl HomeScreen {
                     .constraintEqualToAnchor(&right_container.bottomAnchor()),
             ]));
 
-            right_vc.setView(&right_container);
+            let right_effect = NSVisualEffectView::initWithFrame(
+                NSVisualEffectView::alloc(mtm),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(600.0, 700.0)),
+            );
+            right_effect.setMaterial(NSVisualEffectMaterial::UnderWindowBackground);
+            right_effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+            right_effect.setState(NSVisualEffectState::FollowsWindowActiveState);
+            right_effect.setAutoresizingMask(
+                objc2_app_kit::NSAutoresizingMaskOptions::ViewWidthSizable
+                    | objc2_app_kit::NSAutoresizingMaskOptions::ViewHeightSizable,
+            );
+            right_effect.addSubview(&right_container);
+
+            NSLayoutConstraint::activateConstraints(&NSArray::from_slice(&[
+                &*right_container
+                    .topAnchor()
+                    .constraintEqualToAnchor(&right_effect.topAnchor()),
+                &*right_container
+                    .leadingAnchor()
+                    .constraintEqualToAnchor(&right_effect.leadingAnchor()),
+                &*right_container
+                    .trailingAnchor()
+                    .constraintEqualToAnchor(&right_effect.trailingAnchor()),
+                &*right_container
+                    .bottomAnchor()
+                    .constraintEqualToAnchor(&right_effect.bottomAnchor()),
+            ]));
+
+            right_vc.setView(&right_effect);
         }
 
         let right_item = unsafe { NSSplitViewItem::splitViewItemWithViewController(&right_vc) };
@@ -1329,5 +1574,40 @@ impl HomeScreen {
 
     pub fn refresh(&self) {
         self.delegate.refresh_current_view();
+    }
+
+    pub fn main_table(&self) -> Option<Retained<NSTableView>> {
+        self.delegate.ivars().main_table.borrow().clone()
+    }
+
+    pub fn sidebar_table(&self) -> Option<Retained<NSTableView>> {
+        self.delegate.ivars().sidebar_table.borrow().clone()
+    }
+
+    pub fn search_field(&self) -> Option<Retained<NSSearchField>> {
+        self.delegate.ivars().search_field.borrow().clone()
+    }
+
+    pub fn select_sidebar_row(&self, row: usize) {
+        let rebuilt = HomeDelegate::build_sidebar_items();
+        *self.delegate.ivars().sidebar_items.borrow_mut() = rebuilt;
+        if let Some(st) = self.sidebar_table() {
+            unsafe { st.reloadData() };
+            let total = unsafe { st.numberOfRows() } as usize;
+            if row < total {
+                let idx = unsafe { NSIndexSet::indexSetWithIndex(row) };
+                unsafe { st.selectRowIndexes_byExtendingSelection(&idx, false) };
+                let item_opt = self
+                    .delegate
+                    .ivars()
+                    .sidebar_items
+                    .borrow()
+                    .get(row)
+                    .cloned();
+                if let Some(item) = item_opt {
+                    self.delegate.update_main_area_for_sidebar_selection(&item);
+                }
+            }
+        }
     }
 }
