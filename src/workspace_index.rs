@@ -4,7 +4,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use objc2::AnyThread;
@@ -42,7 +42,27 @@ pub static INDEX: Lazy<Mutex<WorkspaceIndex>> = Lazy::new(|| {
 });
 
 pub static INDEXING_STATUS: Lazy<Mutex<Option<(usize, usize)>>> = Lazy::new(|| Mutex::new(None));
-pub static CANCEL_INDEXING: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+pub struct IndexingGeneration {
+    current: AtomicU64,
+}
+
+impl IndexingGeneration {
+    pub const fn new() -> Self {
+        Self {
+            current: AtomicU64::new(0),
+        }
+    }
+
+    pub fn begin(&self) -> u64 {
+        self.current.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    pub fn is_current(&self, generation: u64) -> bool {
+        self.current.load(Ordering::SeqCst) == generation
+    }
+}
+
+pub static INDEXING_GENERATION: IndexingGeneration = IndexingGeneration::new();
 pub static WORKSPACE_PDFS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 pub fn get_workspace_pdfs() -> (Option<String>, Vec<String>) {
@@ -286,7 +306,7 @@ pub fn search_workspace(query: &str) -> Vec<SearchResult> {
 }
 
 pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<String>) {
-    CANCEL_INDEXING.store(true, Ordering::SeqCst);
+    let generation = INDEXING_GENERATION.begin();
     let deep_search_enabled = crate::settings::SettingsManager::bool_pref(
         crate::settings::PREF_DEEP_WORKSPACE_SEARCH,
         true,
@@ -294,23 +314,45 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
 
     // Spawn background thread
     std::thread::spawn(move || {
-        // Short pause to allow previous indexing to exit if any
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        CANCEL_INDEXING.store(false, Ordering::SeqCst);
+        if !INDEXING_GENERATION.is_current(generation) {
+            return;
+        }
 
         {
             let mut idx = INDEX.lock().unwrap_or_else(|p| p.into_inner());
+            if !INDEXING_GENERATION.is_current(generation) {
+                return;
+            }
             idx.current_workspace = Some(workspace_dir.clone());
         }
 
         // Collect all PDF files in workspace safely
         let mut pdf_files = Vec::new();
         let mut visited = std::collections::HashSet::new();
-        collect_pdfs_safe(Path::new(&workspace_dir), &mut pdf_files, &mut visited, 0);
+        collect_pdfs_safe_for_generation(
+            Path::new(&workspace_dir),
+            &mut pdf_files,
+            &mut visited,
+            0,
+            Some(generation),
+        );
 
-        *WORKSPACE_PDFS.lock().unwrap_or_else(|p| p.into_inner()) = pdf_files.clone();
+        if !INDEXING_GENERATION.is_current(generation) {
+            return;
+        }
+
+        {
+            let mut workspace_pdfs = WORKSPACE_PDFS.lock().unwrap_or_else(|p| p.into_inner());
+            if !INDEXING_GENERATION.is_current(generation) {
+                return;
+            }
+            *workspace_pdfs = pdf_files.clone();
+        }
 
         if !deep_search_enabled {
+            if !INDEXING_GENERATION.is_current(generation) {
+                return;
+            }
             *INDEXING_STATUS.lock().unwrap_or_else(|p| p.into_inner()) = None;
             return;
         }
@@ -330,6 +372,9 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
 
         let total = pdf_files.len();
         if total == 0 {
+            if !INDEXING_GENERATION.is_current(generation) {
+                return;
+            }
             *INDEXING_STATUS.lock().unwrap_or_else(|p| p.into_inner()) = None;
             return;
         }
@@ -338,7 +383,7 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
         let mut changed_anything = false;
 
         for (i, file_path) in pdf_files.iter().enumerate() {
-            if CANCEL_INDEXING.load(Ordering::SeqCst) {
+            if !INDEXING_GENERATION.is_current(generation) {
                 break;
             }
 
@@ -367,8 +412,11 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
             };
 
             if needs_index {
-                if let Some(extracted) = extract_pdf_text(file_path, mtime, file_size) {
+                if let Some(extracted) = extract_pdf_text(file_path, mtime, file_size, generation) {
                     let mut idx = INDEX.lock().unwrap_or_else(|p| p.into_inner());
+                    if !INDEXING_GENERATION.is_current(generation) {
+                        return;
+                    }
                     idx.entries.insert(file_path.clone(), extracted);
                     changed_anything = true;
                     _indexed_count += 1;
@@ -377,6 +425,10 @@ pub fn start_indexing_workspace(workspace_dir: String, priority_path: Option<Str
 
             // Yield briefly to ensure zero UI hiccups
             std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        if !INDEXING_GENERATION.is_current(generation) {
+            return;
         }
 
         *INDEXING_STATUS.lock().unwrap_or_else(|p| p.into_inner()) = None;
@@ -394,7 +446,20 @@ pub fn collect_pdfs_safe(
     visited: &mut std::collections::HashSet<PathBuf>,
     depth: usize,
 ) {
-    if CANCEL_INDEXING.load(Ordering::SeqCst) || depth > 25 || out.len() >= 10_000 {
+    collect_pdfs_safe_for_generation(dir, out, visited, depth, None);
+}
+
+fn collect_pdfs_safe_for_generation(
+    dir: &Path,
+    out: &mut Vec<String>,
+    visited: &mut std::collections::HashSet<PathBuf>,
+    depth: usize,
+    generation: Option<u64>,
+) {
+    if generation.is_some_and(|value| !INDEXING_GENERATION.is_current(value))
+        || depth > 25
+        || out.len() >= 10_000
+    {
         return;
     }
     if let Ok(canonical) = dir.canonicalize() {
@@ -411,7 +476,9 @@ pub fn collect_pdfs_safe(
         crate::settings::SettingsManager::bool_pref(crate::settings::PREF_SHOW_HIDDEN_FILES, false);
 
     for entry in entries.flatten() {
-        if CANCEL_INDEXING.load(Ordering::SeqCst) || out.len() >= 10_000 {
+        if generation.is_some_and(|value| !INDEXING_GENERATION.is_current(value))
+            || out.len() >= 10_000
+        {
             return;
         }
         let path = entry.path();
@@ -427,7 +494,7 @@ pub fn collect_pdfs_safe(
             continue;
         }
         if path.is_dir() {
-            collect_pdfs_safe(&path, out, visited, depth + 1);
+            collect_pdfs_safe_for_generation(&path, out, visited, depth + 1, generation);
         } else if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext.eq_ignore_ascii_case("pdf") {
@@ -438,7 +505,7 @@ pub fn collect_pdfs_safe(
     }
 }
 
-fn extract_pdf_text(path: &str, mtime: u64, file_size: u64) -> Option<IndexedPdf> {
+fn extract_pdf_text(path: &str, mtime: u64, file_size: u64, generation: u64) -> Option<IndexedPdf> {
     let url_ns = unsafe { NSURL::fileURLWithPath(&NSString::from_str(path)) };
     let doc = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &url_ns) }?;
 
@@ -455,7 +522,7 @@ fn extract_pdf_text(path: &str, mtime: u64, file_size: u64) -> Option<IndexedPdf
     let mut pages = Vec::with_capacity(max_pages.min(512));
 
     for p in 0..max_pages {
-        if CANCEL_INDEXING.load(Ordering::SeqCst) {
+        if !INDEXING_GENERATION.is_current(generation) {
             return None;
         }
         if let Some(page) = unsafe { doc.pageAtIndex(p) } {
@@ -485,6 +552,17 @@ fn extract_pdf_text(path: &str, mtime: u64, file_size: u64) -> Option<IndexedPdf
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn test_indexing_generation_invalidates_older_workers() {
+        let generations = IndexingGeneration::new();
+        let first = generations.begin();
+        assert!(generations.is_current(first));
+
+        let second = generations.begin();
+        assert!(!generations.is_current(first));
+        assert!(generations.is_current(second));
+    }
 
     #[test]
     fn test_roundtrip_index_serialization() {

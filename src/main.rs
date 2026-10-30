@@ -94,11 +94,19 @@ impl Default for AppContentMode {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct PendingPdfPresentation {
+    mode: AppContentMode,
+    page_index: Option<usize>,
+    suppress_history_update: bool,
+}
+
 #[derive(Default)]
 pub struct AppDelegateIvars {
     pub content_mode: std::cell::Cell<AppContentMode>,
     pub pending_url: std::cell::RefCell<Option<Retained<objc2_foundation::NSURL>>>,
     pub pending_pdf_path: std::cell::RefCell<String>,
+    pending_pdf_presentation: std::cell::Cell<Option<PendingPdfPresentation>>,
     pub window: OnceCell<Retained<NSWindow>>,
     pub pdf_view: OnceCell<Retained<PDFView>>,
     pub split_vc: OnceCell<Retained<NSSplitViewController>>,
@@ -135,6 +143,7 @@ pub struct AppDelegateIvars {
     pub live_watcher_running: std::cell::Cell<bool>,
     pub is_document_edited: std::cell::Cell<bool>,
     pub tab_manager: std::cell::RefCell<crate::tabs::TabManager>,
+    deferred_closed_documents: std::cell::RefCell<Vec<(std::time::Instant, Retained<PDFDocument>)>>,
     pub tab_bar_view: std::cell::OnceCell<Retained<NSView>>,
     pub right_sidebar_mode_label: OnceCell<Retained<NSTextField>>,
     pub pdf_top_constraint: OnceCell<Retained<objc2_app_kit::NSLayoutConstraint>>,
@@ -1018,20 +1027,25 @@ define_class!(
                     let Some(path_ns) = (unsafe { url.path() }) else { return; };
                     let path = path_ns.to_string();
                     let pending = self.ivars().pending_pdf_path.borrow().clone();
-                    let is_match = if pending.is_empty() || path == pending {
-                        true
-                    } else {
-                        let p_canon = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::PathBuf::from(&path));
-                        let pend_canon = std::fs::canonicalize(&pending).unwrap_or_else(|_| std::path::PathBuf::from(&pending));
-                        p_canon == pend_canon
-                    };
-                    if is_match {
-                        let mode = if self.ivars().content_mode.get() == AppContentMode::Workspace {
-                            AppContentMode::Workspace
-                        } else {
-                            AppContentMode::StandaloneDocument
-                        };
-                        self.load_pdf_document(doc, &path, mode);
+                    let presentation = pending_pdf_presentation_for_completion(
+                        &pending,
+                        &path,
+                        self.ivars().pending_pdf_presentation.get(),
+                    );
+                    if let Some(presentation) = presentation {
+                        self.ivars().pending_pdf_presentation.set(None);
+                        self.ivars()
+                            .ignore_history_update
+                            .set(presentation.suppress_history_update);
+                        self.load_pdf_document(doc, &path, presentation.mode);
+                        if let Some(page_index) = presentation.page_index {
+                            if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                                if let Some(page) = unsafe { doc.pageAtIndex(page_index) } {
+                                    unsafe { pdf_view.goToPage(&page) };
+                                }
+                            }
+                        }
+                        self.ivars().ignore_history_update.set(false);
                     } else {
                         crate::log_pdf!("[DIAGNOSTIC] Discarded obsolete doc: {}", path);
                     }
@@ -1039,6 +1053,25 @@ define_class!(
             } else {
                 crate::log_pdf!("[DIAGNOSTIC] doc is None");
             }
+        }
+
+        #[unsafe(method(pdfLoadDidFail:))]
+        fn pdf_load_did_fail(&self, path: &objc2_foundation::NSString) {
+            let path = path.to_string();
+            if !pdf_load_matches_pending(&self.ivars().pending_pdf_path.borrow(), &path) {
+                return;
+            }
+            self.ivars().pending_pdf_presentation.set(None);
+            let filename = std::path::Path::new(&path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("Document.pdf");
+            self.show_error_panel(
+                "Unable to Open PDF",
+                "The file is damaged, corrupted, or does not contain any readable PDF pages.",
+                filename,
+                false,
+            );
         }
 
         #[unsafe(method(updateOutlineEmptyState))]
@@ -1235,21 +1268,8 @@ define_class!(
                                     }
 
                                     // Local file
-                                    *self.ivars().pending_pdf_path.borrow_mut() = url_str.clone();
-                                    let app_ptr = self as *const AppDelegate as usize;
-
                                     crate::log_pdf!("[DIAGNOSTIC] PDF LOAD START");
-                                    std::thread::spawn(move || {
-                                        let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&url_str)) };
-                                        let doc = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &nsurl) };
-                                        if let Some(doc) = doc {
-                                            let doc_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(doc) };
-                                            let app_raw = app_ptr as *mut objc2::runtime::AnyObject;
-                                            let _: () = unsafe {
-                                                objc2::msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(pdfDidLoad:), withObject: &*doc_any, waitUntilDone: false]
-                                            };
-                                        }
-                                    });
+                                    self.start_pdf_load_in_background(url_str);
                                 }
                             }
                         }
@@ -1290,21 +1310,12 @@ define_class!(
                 };
                 guard.remove(&path_str);
             }
-            crate::log_pdf!("[DIAGNOSTIC] PENDING OPEN LOOKUP: pending path = {}, matches = {}", pending, pending == path_str);
+            let pending_matches = should_reopen_downloaded_pdf(&pending, &path_str);
+            crate::log_pdf!("[DIAGNOSTIC] PENDING OPEN LOOKUP: pending path = {}, matches = {}", pending, pending_matches);
 
-            if pending == path_str {
+            if pending_matches {
                 crate::log_pdf!("[DIAGNOSTIC] PDF LOAD START");
-                let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(path) };
-                let doc = unsafe { objc2_pdf_kit::PDFDocument::initWithURL(objc2_pdf_kit::PDFDocument::alloc(), &nsurl) };
-                if let Some(doc) = doc {
-                    crate::log_pdf!("[DIAGNOSTIC] PDF LOAD COMPLETE");
-                    let doc_any = unsafe { objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(doc) };
-                    println!("[DIAGNOSTIC] PDF DISPLAY DISPATCH");
-                    let _: () = unsafe { objc2::msg_send![self, pdfDidLoad: &*doc_any] };
-                    *self.ivars().pending_pdf_path.borrow_mut() = String::new();
-                } else {
-                    crate::log_pdf!("[DIAGNOSTIC] PDF LOAD FAILED");
-                }
+                self.start_pdf_load_in_background(path_str);
             }
         }
 
@@ -1592,26 +1603,21 @@ define_class!(
                 self.ivars().history_index.set(idx - 1);
                 let hist = self.ivars().history.borrow();
                 let entry = &hist[idx - 2];
-                self.ivars().ignore_history_update.set(true);
-
                 let path = &entry.0;
                 let page_idx = entry.1;
 
                 let current_path = self.ivars().pending_pdf_path.borrow().clone();
                 if current_path != *path {
-                    *self.ivars().pending_pdf_path.borrow_mut() = path.clone();
-                    let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(path)) };
-                    let doc = unsafe { objc2_pdf_kit::PDFDocument::initWithURL(objc2_pdf_kit::PDFDocument::alloc(), &nsurl) };
-                    if let Some(doc) = doc {
-                        let mode = self.ivars().content_mode.get();
-                        self.load_pdf_document(&doc, path, mode);
-                        if let Some(pdf_view) = self.ivars().pdf_view.get() {
-                            if let Some(page) = unsafe { doc.pageAtIndex(page_idx) } {
-                                unsafe { pdf_view.goToPage(&page) };
-                            }
-                        }
-                    }
+                    self.start_pdf_load_in_background_with_presentation(
+                        path.clone(),
+                        PendingPdfPresentation {
+                            mode: self.ivars().content_mode.get(),
+                            page_index: Some(page_idx),
+                            suppress_history_update: true,
+                        },
+                    );
                 } else {
+                    self.ivars().ignore_history_update.set(true);
                     if let Some(pdf_view) = self.ivars().pdf_view.get() {
                         if let Some(doc) = unsafe { pdf_view.document() } {
                             if let Some(page) = unsafe { doc.pageAtIndex(page_idx) } {
@@ -1619,9 +1625,8 @@ define_class!(
                             }
                         }
                     }
+                    self.ivars().ignore_history_update.set(false);
                 }
-
-                self.ivars().ignore_history_update.set(false);
             }
         }
 
@@ -1632,26 +1637,21 @@ define_class!(
             if idx < hist.len() {
                 self.ivars().history_index.set(idx + 1);
                 let entry = &hist[idx];
-                self.ivars().ignore_history_update.set(true);
-
                 let path = &entry.0;
                 let page_idx = entry.1;
 
                 let current_path = self.ivars().pending_pdf_path.borrow().clone();
                 if current_path != *path {
-                    *self.ivars().pending_pdf_path.borrow_mut() = path.clone();
-                    let nsurl = unsafe { objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(path)) };
-                    let doc = unsafe { objc2_pdf_kit::PDFDocument::initWithURL(objc2_pdf_kit::PDFDocument::alloc(), &nsurl) };
-                    if let Some(doc) = doc {
-                        let mode = self.ivars().content_mode.get();
-                        self.load_pdf_document(&doc, path, mode);
-                        if let Some(pdf_view) = self.ivars().pdf_view.get() {
-                            if let Some(page) = unsafe { doc.pageAtIndex(page_idx) } {
-                                unsafe { pdf_view.goToPage(&page) };
-                            }
-                        }
-                    }
+                    self.start_pdf_load_in_background_with_presentation(
+                        path.clone(),
+                        PendingPdfPresentation {
+                            mode: self.ivars().content_mode.get(),
+                            page_index: Some(page_idx),
+                            suppress_history_update: true,
+                        },
+                    );
                 } else {
+                    self.ivars().ignore_history_update.set(true);
                     if let Some(pdf_view) = self.ivars().pdf_view.get() {
                         if let Some(doc) = unsafe { pdf_view.document() } {
                             if let Some(page) = unsafe { doc.pageAtIndex(page_idx) } {
@@ -1659,9 +1659,8 @@ define_class!(
                             }
                         }
                     }
+                    self.ivars().ignore_history_update.set(false);
                 }
-
-                self.ivars().ignore_history_update.set(false);
             }
         }
 
@@ -2166,6 +2165,15 @@ define_class!(
         #[unsafe(method(pdfDocumentChanged:))]
         fn pdf_document_changed(&self, _notification: &objc2_foundation::NSNotification) {
             // Already handling in pdfDidLoad
+        }
+
+        #[unsafe(method(releaseDeferredClosedDocuments))]
+        fn release_deferred_closed_documents(&self) {
+            let now = std::time::Instant::now();
+            self.ivars()
+                .deferred_closed_documents
+                .borrow_mut()
+                .retain(|(deadline, _)| *deadline > now);
         }
 
         #[unsafe(method(applicationDidFinishLaunching:))]
@@ -3101,6 +3109,53 @@ impl AppDelegate {
         unsafe { objc2::msg_send![super(this), init] }
     }
 
+    fn start_pdf_load_in_background(&self, path: String) {
+        let mode = if self.ivars().content_mode.get() == AppContentMode::Workspace {
+            AppContentMode::Workspace
+        } else {
+            AppContentMode::StandaloneDocument
+        };
+        self.start_pdf_load_in_background_with_presentation(
+            path,
+            PendingPdfPresentation {
+                mode,
+                page_index: None,
+                suppress_history_update: false,
+            },
+        );
+    }
+
+    fn start_pdf_load_in_background_with_presentation(
+        &self,
+        path: String,
+        presentation: PendingPdfPresentation,
+    ) {
+        *self.ivars().pending_pdf_path.borrow_mut() = path.clone();
+        self.ivars()
+            .pending_pdf_presentation
+            .set(Some(presentation));
+        let app_ptr = self as *const AppDelegate as usize;
+        std::thread::spawn(move || {
+            let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&path)) };
+            let document = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &nsurl) };
+            let app_raw = app_ptr as *mut objc2::runtime::AnyObject;
+
+            if let Some(document) = document.filter(|doc| unsafe { doc.pageCount() > 0 }) {
+                let document = unsafe {
+                    objc2::rc::Retained::cast_unchecked::<objc2::runtime::AnyObject>(document)
+                };
+                let _: () = unsafe {
+                    objc2::msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(pdfDidLoad:), withObject: &*document, waitUntilDone: false]
+                };
+            } else {
+                let path = NSString::from_str(&path);
+                let _: () = unsafe {
+                    objc2::msg_send![app_raw, performSelectorOnMainThread: objc2::sel!(pdfLoadDidFail:), withObject: &*path, waitUntilDone: false]
+                };
+            }
+        });
+    }
+
     pub fn mark_document_edited(&self, edited: bool) {
         self.ivars().is_document_edited.set(edited);
         if let Some(win) = self.ivars().window.get() {
@@ -3279,6 +3334,7 @@ impl AppDelegate {
     }
 
     pub fn close_tab_at_index(&self, index: usize) {
+        let active_index_before_close = self.ivars().tab_manager.borrow().active_index;
         let tab_opt = self.ivars().tab_manager.borrow().tabs.get(index).cloned();
         let tab = match tab_opt {
             Some(t) => t,
@@ -3315,7 +3371,34 @@ impl AppDelegate {
             }
         }
 
-        let _removed = self.ivars().tab_manager.borrow_mut().remove_tab(index);
+        let should_reinstall_document = crate::tabs::should_reinstall_document_after_tab_close(
+            active_index_before_close,
+            index,
+        );
+        let removed = self.ivars().tab_manager.borrow_mut().remove_tab(index);
+        if let Some(removed) = removed {
+            // PDFThumbnailView and PDFPage rendering can finish asynchronously after
+            // a tab disappears. Keep a small bounded set of backing documents
+            // alive long enough for thumbnail rendering and long OCR calls to
+            // finish so PDFKit never draws an orphaned PDFPage.
+            let mut deferred = self.ivars().deferred_closed_documents.borrow_mut();
+            if deferred.len() == 4 {
+                deferred.remove(0);
+            }
+            deferred.push((
+                std::time::Instant::now() + std::time::Duration::from_secs(60),
+                removed.document,
+            ));
+            drop(deferred);
+            unsafe {
+                let _: () = msg_send![
+                    self,
+                    performSelector: sel!(releaseDeferredClosedDocuments),
+                    withObject: std::ptr::null::<AnyObject>(),
+                    afterDelay: 60.0f64
+                ];
+            }
+        }
         let count = self.ivars().tab_manager.borrow().tab_count();
         if count == 0 {
             if let Some(pdf_view) = self.ivars().pdf_view.get() {
@@ -3324,9 +3407,20 @@ impl AppDelegate {
             *self.ivars().pending_pdf_path.borrow_mut() = String::new();
             self.mark_document_edited(false);
             let _: () = unsafe { objc2::msg_send![self, showHomeScreen: None::<&AnyObject>] };
-        } else {
+        } else if should_reinstall_document {
+            // The PDFView still owns the document from the removed active tab.
+            // Clear it before activating the replacement so switch_to_tab_index
+            // cannot save the removed document's page into the new active tab.
+            if let Some(pdf_view) = self.ivars().pdf_view.get() {
+                unsafe { pdf_view.setDocument(None) };
+            }
             let new_idx = self.ivars().tab_manager.borrow().active_index;
             self.switch_to_tab_index(new_idx);
+        } else {
+            // Closing an inactive tab leaves the displayed PDFDocument unchanged.
+            // Reassigning that same document detaches live PDFPage instances while
+            // PDFKit may still be rendering thumbnails or OCR input.
+            self.refresh_tab_bar();
         }
     }
 
@@ -4235,34 +4329,28 @@ impl AppDelegate {
                 if let Some(last_time) = last {
                     if mtime > last_time {
                         self.ivars().last_file_mtime.set(Some(mtime));
-                        let nsurl = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&path)) };
-                        if let Some(new_doc) =
-                            unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &nsurl) }
-                        {
-                            let cur_page_idx = if let Some(pv) = self.ivars().pdf_view.get() {
-                                if let Some(d) = unsafe { pv.document() } {
-                                    if let Some(p) = unsafe { pv.currentPage() } {
-                                        unsafe { d.indexForPage(&p) }
-                                    } else {
-                                        0
-                                    }
+                        let cur_page_idx = if let Some(pv) = self.ivars().pdf_view.get() {
+                            if let Some(d) = unsafe { pv.document() } {
+                                if let Some(p) = unsafe { pv.currentPage() } {
+                                    unsafe { d.indexForPage(&p) }
                                 } else {
                                     0
                                 }
                             } else {
                                 0
-                            };
-
-                            let mode = self.ivars().content_mode.get();
-                            self.ivars().ignore_history_update.set(true);
-                            self.load_pdf_document(&new_doc, &path, mode);
-                            if let Some(pv) = self.ivars().pdf_view.get() {
-                                if let Some(page) = unsafe { new_doc.pageAtIndex(cur_page_idx) } {
-                                    unsafe { pv.goToPage(&page) };
-                                }
                             }
-                            self.ivars().ignore_history_update.set(false);
-                        }
+                        } else {
+                            0
+                        };
+
+                        self.start_pdf_load_in_background_with_presentation(
+                            path.clone(),
+                            PendingPdfPresentation {
+                                mode: self.ivars().content_mode.get(),
+                                page_index: Some(cur_page_idx),
+                                suppress_history_update: true,
+                            },
+                        );
                     }
                 } else {
                     self.ivars().last_file_mtime.set(Some(mtime));
@@ -4318,27 +4406,8 @@ impl AppDelegate {
                 self.switch_to_tab_index(existing_idx);
                 return;
             }
-            let doc = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), url) };
-            if let Some(doc) = doc {
-                if unsafe { doc.pageCount() } == 0 {
-                    self.show_error_panel(
-                        "Unable to Open PDF",
-                        "The file contains no readable PDF pages or is corrupted.",
-                        &filename,
-                        false,
-                    );
-                    return;
-                }
-                *self.ivars().pending_pdf_path.borrow_mut() = path_str.clone();
-                self.load_pdf_document(&doc, &path_str, target_mode);
-            } else {
-                self.show_error_panel(
-                    "Unable to Open PDF",
-                    "The file is damaged, corrupted, or is not a valid PDF document.",
-                    &filename,
-                    false,
-                );
-            }
+            self.ivars().content_mode.set(target_mode);
+            self.start_pdf_load_in_background(path_str);
         }
     }
 
@@ -4866,10 +4935,103 @@ pub fn apply_thumbnail_styling(tv: &PDFThumbnailView) {
     walk(tv);
 }
 
+fn pdf_load_matches_pending(pending: &str, loaded: &str) -> bool {
+    if pending.is_empty() || loaded == pending {
+        return true;
+    }
+    let loaded = std::fs::canonicalize(loaded).unwrap_or_else(|_| std::path::PathBuf::from(loaded));
+    let pending =
+        std::fs::canonicalize(pending).unwrap_or_else(|_| std::path::PathBuf::from(pending));
+    loaded == pending
+}
+
+fn pending_pdf_presentation_for_completion(
+    pending: &str,
+    loaded: &str,
+    presentation: Option<PendingPdfPresentation>,
+) -> Option<PendingPdfPresentation> {
+    pdf_load_matches_pending(pending, loaded)
+        .then_some(presentation)
+        .flatten()
+}
+
+fn should_reopen_downloaded_pdf(pending: &str, completed: &str) -> bool {
+    pdf_load_matches_pending(pending, completed)
+}
+
 #[cfg(test)]
 mod thumb_tests {
     use super::*;
     use objc2_foundation::{NSDate, NSRunLoop};
+
+    #[test]
+    fn test_loaded_pdf_must_match_latest_pending_path() {
+        let path = std::env::temp_dir().join(format!(
+            "iridescence-pdf-load-match-{}.pdf",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"fixture").expect("temporary fixture should be writable");
+        let public_path = path.to_string_lossy().to_string();
+        let private_path = format!("/private{}", public_path);
+
+        assert!(pdf_load_matches_pending("", "/tmp/current.pdf"));
+        assert!(pdf_load_matches_pending(&public_path, &private_path));
+        assert!(!pdf_load_matches_pending(
+            "/tmp/newer.pdf",
+            "/tmp/obsolete.pdf"
+        ));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_async_history_load_preserves_presentation_context() {
+        let context = PendingPdfPresentation {
+            mode: AppContentMode::Workspace,
+            page_index: Some(9),
+            suppress_history_update: true,
+        };
+
+        assert_eq!(
+            pending_pdf_presentation_for_completion(
+                "/tmp/history-target.pdf",
+                "/tmp/history-target.pdf",
+                Some(context),
+            ),
+            Some(context)
+        );
+        assert_eq!(
+            pending_pdf_presentation_for_completion(
+                "/tmp/newer-request.pdf",
+                "/tmp/obsolete-result.pdf",
+                Some(context),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn test_completed_icloud_download_reopens_equivalent_pending_path() {
+        let fixture_dir = std::env::temp_dir().join(format!(
+            "iridescence-icloud-completion-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&fixture_dir).expect("fixture directory should be writable");
+        let fixture = fixture_dir.join("Document.pdf");
+        std::fs::write(&fixture, b"completed download")
+            .expect("completed download fixture should be writable");
+        let public_path = fixture.to_string_lossy().to_string();
+        let private_path = format!("/private{}", public_path);
+
+        assert!(should_reopen_downloaded_pdf(&public_path, &private_path));
+        assert!(!should_reopen_downloaded_pdf(
+            "/tmp/iCloud Drive/Newer.pdf",
+            "/private/tmp/iCloud Drive/Older.pdf"
+        ));
+
+        let _ = std::fs::remove_file(fixture);
+        let _ = std::fs::remove_dir(fixture_dir);
+    }
 
     #[test]
     fn test_thumbnail_selection_styling_removes_pill_and_adds_accent_border() {

@@ -2,6 +2,7 @@
 set -e
 
 PROFILE="${PROFILE:-release}"
+APP_BUNDLE="Iridecence PDF Reader.app"
 if [ "$PROFILE" = "release" ]; then
     echo "Building release binary..."
     CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build --release
@@ -13,17 +14,18 @@ else
 fi
 
 echo "Creating App Bundle structure..."
-mkdir -p "Iridecence PDF Reader.app/Contents/MacOS"
-mkdir -p "Iridecence PDF Reader.app/Contents/Resources"
+rm -rf "$APP_BUNDLE"
+mkdir -p "$APP_BUNDLE/Contents/MacOS"
+mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 echo "Copying binary ($BIN_PATH)..."
-cp "$BIN_PATH" "Iridecence PDF Reader.app/Contents/MacOS/oxireader"
+cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/oxireader"
 
 echo "Copying icon..."
-cp AppIcon.icns "Iridecence PDF Reader.app/Contents/Resources/"
+cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 
 echo "Creating Info.plist..."
-cat > "Iridecence PDF Reader.app/Contents/Info.plist" << 'PLIST'
+cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -39,9 +41,9 @@ cat > "Iridecence PDF Reader.app/Contents/Info.plist" << 'PLIST'
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.5.0</string>
+    <string>0.5.1</string>
     <key>CFBundleVersion</key>
-    <string>5</string>
+    <string>6</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
@@ -81,4 +83,4 @@ cat > "Iridecence PDF Reader.app/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
-echo "Done! Run: open 'Iridecence PDF Reader.app'"
+echo "Done! Run: open '$APP_BUNDLE'"

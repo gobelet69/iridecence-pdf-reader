@@ -6,6 +6,15 @@ use objc2_foundation::*;
 use objc2_pdf_kit::{PDFDocumentDelegate, PDFSelection, PDFView};
 use std::cell::RefCell;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SearchDispatch {
+    Incremental,
+}
+
+fn search_dispatch(_page_count: usize) -> SearchDispatch {
+    SearchDispatch::Incremental
+}
+
 #[derive(Default)]
 pub struct PdfSearchDelegateIvars {
     pub pdf_view: std::cell::OnceCell<Retained<PDFView>>,
@@ -445,41 +454,12 @@ impl PdfSearchDelegate {
                     if doc.isFinding() {
                         doc.cancelFindString();
                     }
-                    let page_count = doc.pageCount();
-                    if page_count <= 500 {
-                        self.ivars().is_searching.set(false);
-                        let matches: Option<Retained<NSArray<PDFSelection>>> = msg_send![
-                            &*doc,
-                            findString: query,
-                            withOptions: NSStringCompareOptions::CaseInsensitiveSearch.0
-                        ];
-                        let mut vec = Vec::new();
-                        if let Some(ref arr) = matches {
-                            for i in 0..arr.count() {
-                                vec.push(arr.objectAtIndex(i));
-                            }
-                            let _: () = msg_send![pdf_view, setHighlightedSelections: &**arr];
-                        } else {
-                            self.clear_pdf_highlights();
-                        }
-                        let has_any = !vec.is_empty();
-                        *self.ivars().results.borrow_mut() = vec;
-                        if let Some(outline_view) = self.ivars().outline_view.get() {
-                            outline_view.reloadData();
-                            if has_any {
-                                let idx = NSIndexSet::indexSetWithIndex(0);
-                                outline_view.selectRowIndexes_byExtendingSelection(&idx, false);
-                                self.navigate_to_row(outline_view, 0);
-                            }
-                        }
-                        self.update_empty_state();
-                    } else {
-                        doc.setDelegate(Some(ProtocolObject::from_ref(self)));
-                        doc.beginFindString_withOptions(
-                            query,
-                            NSStringCompareOptions::CaseInsensitiveSearch,
-                        );
-                    }
+                    let _dispatch = search_dispatch(doc.pageCount());
+                    doc.setDelegate(Some(ProtocolObject::from_ref(self)));
+                    doc.beginFindString_withOptions(
+                        query,
+                        NSStringCompareOptions::CaseInsensitiveSearch,
+                    );
                 }
             }
         }
@@ -544,5 +524,17 @@ impl PdfSearchDelegate {
                 self.navigate_to_row(outline_view, current_row);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_pdf_searches_use_incremental_dispatch() {
+        assert_eq!(search_dispatch(1), SearchDispatch::Incremental);
+        assert_eq!(search_dispatch(500), SearchDispatch::Incremental);
+        assert_eq!(search_dispatch(1_200), SearchDispatch::Incremental);
     }
 }

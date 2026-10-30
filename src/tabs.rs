@@ -30,6 +30,13 @@ pub struct TabManager {
     next_id: usize,
 }
 
+pub(crate) fn should_reinstall_document_after_tab_close(
+    active_index: usize,
+    removed_index: usize,
+) -> bool {
+    active_index == removed_index
+}
+
 impl TabManager {
     pub fn new() -> Self {
         Self {
@@ -625,6 +632,13 @@ mod tests {
         let mut mgr = TabManager::new();
         assert!(mgr.remove_tab(0).is_none());
         assert!(mgr.remove_tab(10).is_none());
+    }
+
+    #[test]
+    fn test_closing_inactive_tab_does_not_reinstall_active_pdf_document() {
+        assert!(!should_reinstall_document_after_tab_close(2, 0));
+        assert!(!should_reinstall_document_after_tab_close(0, 2));
+        assert!(should_reinstall_document_after_tab_close(1, 1));
     }
 
     #[test]

@@ -15,6 +15,7 @@ use objc2_foundation::{
 };
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
 pub enum SidebarItem {
@@ -27,6 +28,64 @@ pub struct MainAreaItem {
     pub name: String,
     pub path: String,
     pub is_folder: bool,
+    pub file_size: Option<u64>,
+}
+
+#[derive(Default)]
+struct DirectoryLoadState {
+    current: u64,
+}
+
+impl DirectoryLoadState {
+    fn begin(&mut self) -> u64 {
+        self.current = self.current.wrapping_add(1);
+        self.current
+    }
+
+    fn accepts(&self, generation: u64) -> bool {
+        self.current == generation
+    }
+}
+
+fn read_directory_items(dir_path: &Path, show_hidden: bool) -> Vec<MainAreaItem> {
+    let mut items = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir_path) else {
+        return items;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == ".DS_Store" || (!show_hidden && name.starts_with('.')) {
+            continue;
+        }
+        let is_folder = entry
+            .file_type()
+            .map(|kind| kind.is_dir())
+            .unwrap_or_else(|_| path.is_dir());
+        let is_pdf = !is_folder
+            && path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
+        if is_folder || is_pdf {
+            items.push(MainAreaItem {
+                name,
+                path: path.to_string_lossy().to_string(),
+                is_folder,
+                file_size: if is_folder {
+                    None
+                } else {
+                    entry.metadata().ok().map(|metadata| metadata.len())
+                },
+            });
+        }
+    }
+
+    items.sort_by(|left, right| {
+        (!left.is_folder, left.name.to_lowercase())
+            .cmp(&(!right.is_folder, right.name.to_lowercase()))
+    });
+    items
 }
 
 #[derive(Default)]
@@ -42,6 +101,8 @@ pub struct HomeDelegateIvars {
     pub main_subtitle_label: RefCell<Option<Retained<NSTextField>>>,
     pub empty_state_view: RefCell<Option<Retained<NSView>>>,
     pub hover_coordinator: crate::glass_row::HoverCoordinator,
+    directory_load_state: RefCell<DirectoryLoadState>,
+    directory_results: Arc<Mutex<Vec<(u64, Vec<MainAreaItem>)>>>,
 }
 
 define_class!(
@@ -320,8 +381,8 @@ define_class!(
                         format!("{} · Missing", display_path)
                     } else if item.is_folder {
                         format!("{} · Workspace Folder", display_path)
-                    } else if let Ok(meta) = std::fs::metadata(&item.path) {
-                        let kb = (meta.len() as f64 / 1024.0).max(1.0);
+                    } else if let Some(file_size) = item.file_size {
+                        let kb = (file_size as f64 / 1024.0).max(1.0);
                         if kb >= 1024.0 {
                             format!("{} · {:.1} MB", display_path, kb / 1024.0)
                         } else {
@@ -406,6 +467,13 @@ define_class!(
 
         #[unsafe(method(mouseMoved:))]
         fn mouse_moved(&self, _event: &objc2_app_kit::NSEvent) {
+            if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+                self.ivars().hover_coordinator.update_hover(table);
+            }
+        }
+
+        #[unsafe(method(mouseEntered:))]
+        fn mouse_entered(&self, _event: &objc2_app_kit::NSEvent) {
             if let Some(table) = self.ivars().main_table.borrow().as_ref() {
                 self.ivars().hover_coordinator.update_hover(table);
             }
@@ -548,6 +616,30 @@ define_class!(
             handled
         }
 
+        #[unsafe(method(finishDirectoryLoad))]
+        fn finish_directory_load(&self) {
+            let state = self.ivars().directory_load_state.borrow();
+            let current = state.current;
+            let result = {
+                let mut results = self
+                    .ivars()
+                    .directory_results
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let result = results
+                    .iter()
+                    .rposition(|(generation, _)| state.accepts(*generation))
+                    .map(|index| results.remove(index).1);
+                results.retain(|(generation, _)| *generation > current);
+                result
+            };
+            drop(state);
+
+            if let Some(items) = result {
+                self.apply_main_items(items);
+            }
+        }
+
         #[unsafe(method(openPdf:))]
         fn open_pdf(&self, _sender: Option<&AnyObject>) {
             let mtm = MainThreadMarker::from(self);
@@ -642,6 +734,60 @@ impl HomeDelegate {
         unsafe { msg_send![super(this), init] }
     }
 
+    fn apply_main_items(&self, items: Vec<MainAreaItem>) {
+        let query = self
+            .ivars()
+            .search_field
+            .borrow()
+            .as_ref()
+            .map(|field| unsafe { field.stringValue() }.to_string().to_lowercase())
+            .unwrap_or_default();
+        let filtered: Vec<_> = items
+            .iter()
+            .filter(|item| {
+                query.is_empty()
+                    || item.name.to_lowercase().contains(&query)
+                    || item.path.to_lowercase().contains(&query)
+            })
+            .cloned()
+            .collect();
+
+        *self.ivars().all_main_items.borrow_mut() = items;
+        *self.ivars().main_items.borrow_mut() = filtered.clone();
+        if let Some(table) = self.ivars().main_table.borrow().as_ref() {
+            unsafe { table.reloadData() };
+        }
+        if let Some(empty) = self.ivars().empty_state_view.borrow().as_ref() {
+            unsafe { empty.setHidden(!filtered.is_empty()) };
+        }
+    }
+
+    fn start_directory_load(&self, path: String) {
+        let generation = self.ivars().directory_load_state.borrow_mut().begin();
+        self.apply_main_items(Vec::new());
+        if let Some(empty) = self.ivars().empty_state_view.borrow().as_ref() {
+            unsafe { empty.setHidden(true) };
+        }
+
+        let show_hidden = crate::settings::SettingsManager::bool_pref(
+            crate::settings::PREF_SHOW_HIDDEN_FILES,
+            false,
+        );
+        let results = self.ivars().directory_results.clone();
+        let delegate_ptr = self as *const HomeDelegate as usize;
+        std::thread::spawn(move || {
+            let items = read_directory_items(Path::new(&path), show_hidden);
+            results
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push((generation, items));
+            let delegate = delegate_ptr as *mut AnyObject;
+            let _: () = unsafe {
+                msg_send![delegate, performSelectorOnMainThread: sel!(finishDirectoryLoad), withObject: std::ptr::null_mut::<AnyObject>(), waitUntilDone: false]
+            };
+        });
+    }
+
     fn active_main_table_row(&self) -> Option<isize> {
         let table = self.ivars().main_table.borrow();
         let table = table.as_ref()?;
@@ -730,6 +876,7 @@ impl HomeDelegate {
     }
 
     pub fn update_main_area_for_sidebar_selection(&self, item: &SidebarItem) {
+        self.ivars().directory_load_state.borrow_mut().begin();
         let mut new_items = Vec::new();
         let defaults = unsafe { NSUserDefaults::standardUserDefaults() };
 
@@ -776,8 +923,13 @@ impl HomeDelegate {
                                     .to_string();
                                 new_items.push(MainAreaItem {
                                     name,
-                                    path,
                                     is_folder,
+                                    file_size: if is_folder {
+                                        None
+                                    } else {
+                                        std::fs::metadata(&path).ok().map(|metadata| metadata.len())
+                                    },
+                                    path,
                                 });
                             }
                         }
@@ -830,8 +982,11 @@ impl HomeDelegate {
                                             .to_string();
                                         new_items.push(MainAreaItem {
                                             name,
-                                            path,
                                             is_folder,
+                                            file_size: std::fs::metadata(&path)
+                                                .ok()
+                                                .map(|metadata| metadata.len()),
+                                            path,
                                         });
                                     }
                                 }
@@ -868,8 +1023,13 @@ impl HomeDelegate {
                                     .to_string();
                                 new_items.push(MainAreaItem {
                                     name,
-                                    path,
                                     is_folder,
+                                    file_size: if is_folder {
+                                        None
+                                    } else {
+                                        std::fs::metadata(&path).ok().map(|metadata| metadata.len())
+                                    },
+                                    path,
                                 });
                             }
                         }
@@ -883,7 +1043,8 @@ impl HomeDelegate {
                     if let Some(sub_lbl) = self.ivars().main_subtitle_label.borrow().as_ref() {
                         unsafe { sub_lbl.setStringValue(&NSString::from_str(&docs_path)) };
                     }
-                    Self::load_directory_items(&docs_path, &mut new_items);
+                    self.start_directory_load(docs_path);
+                    return;
                 } else if id == "icloud" {
                     if let Some(title_lbl) = self.ivars().main_title_label.borrow().as_ref() {
                         unsafe { title_lbl.setStringValue(&NSString::from_str("iCloud Drive")) };
@@ -894,7 +1055,8 @@ impl HomeDelegate {
                     if let Some(sub_lbl) = self.ivars().main_subtitle_label.borrow().as_ref() {
                         unsafe { sub_lbl.setStringValue(&NSString::from_str("iCloud Documents")) };
                     }
-                    Self::load_directory_items(&icloud_path, &mut new_items);
+                    self.start_directory_load(icloud_path);
+                    return;
                 } else {
                     // Workspace path
                     if let Some(title_lbl) = self.ivars().main_title_label.borrow().as_ref() {
@@ -903,53 +1065,14 @@ impl HomeDelegate {
                     if let Some(sub_lbl) = self.ivars().main_subtitle_label.borrow().as_ref() {
                         unsafe { sub_lbl.setStringValue(&NSString::from_str(id)) };
                     }
-                    Self::load_directory_items(id, &mut new_items);
+                    self.start_directory_load(id.clone());
+                    return;
                 }
             }
             _ => {}
         }
 
-        *self.ivars().all_main_items.borrow_mut() = new_items.clone();
-        *self.ivars().main_items.borrow_mut() = new_items.clone();
-
-        if let Some(table) = self.ivars().main_table.borrow().as_ref() {
-            unsafe { table.reloadData() };
-        }
-
-        if let Some(empty) = self.ivars().empty_state_view.borrow().as_ref() {
-            unsafe { empty.setHidden(!new_items.is_empty()) };
-        }
-    }
-
-    fn load_directory_items(dir_path: &str, items: &mut Vec<MainAreaItem>) {
-        let show_hidden = crate::settings::SettingsManager::bool_pref(
-            crate::settings::PREF_SHOW_HIDDEN_FILES,
-            false,
-        );
-        if let Ok(entries) = std::fs::read_dir(dir_path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let is_dir = path.is_dir();
-                let is_pdf = path
-                    .extension()
-                    .map(|e| e.to_string_lossy().to_lowercase() == "pdf")
-                    .unwrap_or(false);
-                if is_dir || is_pdf {
-                    let name = path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    if name != ".DS_Store" && (show_hidden || !name.starts_with('.')) {
-                        items.push(MainAreaItem {
-                            name,
-                            path: path.to_string_lossy().to_string(),
-                            is_folder: is_dir,
-                        });
-                    }
-                }
-            }
-        }
+        self.apply_main_items(new_items);
     }
 
     pub fn refresh_current_view(&self) {
@@ -1610,5 +1733,44 @@ impl HomeScreen {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod performance_tests {
+    use super::*;
+
+    #[test]
+    fn test_directory_listing_filters_hidden_and_non_pdf_items() {
+        let root =
+            std::env::temp_dir().join(format!("iridescence-home-listing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Folder")).expect("fixture directory should exist");
+        std::fs::write(root.join("visible.pdf"), b"pdf").expect("fixture PDF should exist");
+        std::fs::write(root.join("notes.txt"), b"text").expect("fixture text should exist");
+        std::fs::write(root.join(".hidden.pdf"), b"pdf").expect("hidden fixture should exist");
+
+        let items = read_directory_items(&root, false);
+        let names: Vec<_> = items.iter().map(|item| item.name.as_str()).collect();
+        assert_eq!(names, vec!["Folder", "visible.pdf"]);
+        assert_eq!(
+            items
+                .iter()
+                .find(|item| item.name == "visible.pdf")
+                .and_then(|item| item.file_size),
+            Some(3)
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn test_directory_load_generation_rejects_stale_results() {
+        let mut state = DirectoryLoadState::default();
+        let first = state.begin();
+        let second = state.begin();
+
+        assert!(!state.accepts(first));
+        assert!(state.accepts(second));
     }
 }

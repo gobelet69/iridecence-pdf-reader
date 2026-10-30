@@ -76,6 +76,15 @@ define_class!(
         }
     }
 
+    #[unsafe(method(mouseEntered:))]
+    fn mouse_entered(&self, _event: &objc2_app_kit::NSEvent) {
+        if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {
+            if let Some(outline_view) = weak_view.load() {
+                self.ivars().hover_coordinator.update_hover(&outline_view);
+            }
+        }
+    }
+
     #[unsafe(method(mouseExited:))]
     fn mouse_exited(&self, _event: &objc2_app_kit::NSEvent) {
         if let Some(weak_view) = self.ivars().outline_view.borrow().as_ref() {

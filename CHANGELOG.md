@@ -5,6 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.5.1] - 2026-10-30
+
+### Fixed
+- **Asynchronous PDF Loading**: Offloaded PDFDocument initialization to background threads for opening files, history navigation, post-iCloud download, and external file reloads, keeping the main UI thread fluid.
+- **Non-blocking Search & Enumeration**: Backgrounded PDF text search and Home screen directory enumeration to eliminate UI hitches.
+- **Workspace Navigation & Identity**: Added cancellation tokens for background folder scans, preventing stale completion races and tab identity mismatches.
+- **Tab Lifecycle & Memory**: Resolved inactive-tab PDFKit page detaching and memory retention issues across long reading sessions.
+- **Hover & Mouse Tracking**: Restored missing `mouseEntered:` tracking area events across Home screen cards, Workspace items, and Command Palette rows.
+- **Markup Annotation Geometry**: Corrected page coordinate math for highlight, underline, and strikeout annotations so bounds match text selections accurately.
+
+### Changed
+- App version bumped to 0.5.1 (`Cargo.toml`, `Info.plist`, `build_dmg.sh`).
+- Hardened DMG staging and packaging pipeline with deep strict bundle verification.
+
 ## [0.5.0] - 2026-10-24
 
 ### Added

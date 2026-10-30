@@ -52,6 +52,23 @@ pub struct AnnotationItem {
     pub bounds: NSRect,
 }
 
+fn quadrilateral_points_relative_to_bounds(
+    line_bounds: NSRect,
+    annotation_bounds: NSRect,
+) -> [objc2_foundation::NSPoint; 4] {
+    let left = line_bounds.origin.x - annotation_bounds.origin.x;
+    let right = left + line_bounds.size.width;
+    let bottom = line_bounds.origin.y - annotation_bounds.origin.y;
+    let top = bottom + line_bounds.size.height;
+
+    [
+        objc2_foundation::NSPoint::new(left, top),
+        objc2_foundation::NSPoint::new(right, top),
+        objc2_foundation::NSPoint::new(left, bottom),
+        objc2_foundation::NSPoint::new(right, bottom),
+    ]
+}
+
 /// Adds an annotation to the current text selection of a PDFView.
 /// Returns true if an annotation was added, false otherwise.
 pub fn add_annotation_to_selection(
@@ -156,21 +173,23 @@ pub fn add_annotation_to_selection(
                 let mut quad_points: Vec<Retained<AnyObject>> =
                     Vec::with_capacity(line_rects.len() * 4);
                 for rect in &line_rects {
+                    let [top_left, top_right, bottom_left, bottom_right] =
+                        quadrilateral_points_relative_to_bounds(*rect, annot_bounds);
                     let p_tl: Retained<AnyObject> = msg_send![
                         objc2::class!(NSValue),
-                        valueWithPoint: objc2_foundation::NSPoint::new(rect.origin.x, rect.origin.y + rect.size.height)
+                        valueWithPoint: top_left
                     ];
                     let p_tr: Retained<AnyObject> = msg_send![
                         objc2::class!(NSValue),
-                        valueWithPoint: objc2_foundation::NSPoint::new(rect.origin.x + rect.size.width, rect.origin.y + rect.size.height)
+                        valueWithPoint: top_right
                     ];
                     let p_bl: Retained<AnyObject> = msg_send![
                         objc2::class!(NSValue),
-                        valueWithPoint: objc2_foundation::NSPoint::new(rect.origin.x, rect.origin.y)
+                        valueWithPoint: bottom_left
                     ];
                     let p_br: Retained<AnyObject> = msg_send![
                         objc2::class!(NSValue),
-                        valueWithPoint: objc2_foundation::NSPoint::new(rect.origin.x + rect.size.width, rect.origin.y)
+                        valueWithPoint: bottom_right
                     ];
                     quad_points.push(p_tl);
                     quad_points.push(p_tr);
@@ -487,6 +506,22 @@ mod tests {
         assert_eq!(
             count, 8,
             "Expected 8 quad points for 2 selected lines (4 points per line)"
+        );
+    }
+
+    #[test]
+    fn test_quadrilateral_points_are_relative_to_annotation_bounds() {
+        let annotation_bounds = NSRect::new(NSPoint::new(50.0, 80.0), NSSize::new(250.0, 34.0));
+        let line = NSRect::new(NSPoint::new(60.0, 100.0), NSSize::new(200.0, 14.0));
+
+        assert_eq!(
+            quadrilateral_points_relative_to_bounds(line, annotation_bounds),
+            [
+                NSPoint::new(10.0, 34.0),
+                NSPoint::new(210.0, 34.0),
+                NSPoint::new(10.0, 20.0),
+                NSPoint::new(210.0, 20.0),
+            ]
         );
     }
 }

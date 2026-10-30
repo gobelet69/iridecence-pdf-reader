@@ -1182,8 +1182,8 @@ impl VisualQA {
             unsafe {
                 if let Some(layer) = band.layer() {
                     let c = NSColor::colorWithSRGBRed_green_blue_alpha(r, g, b, 1.0);
-                    let cg: *const std::ffi::c_void = msg_send![&*c, CGColor];
-                    let _: () = msg_send![&*layer, setBackgroundColor: cg];
+                    let cg = c.CGColor();
+                    let _: () = msg_send![&*layer, setBackgroundColor: Retained::as_ptr(&cg)];
                 }
                 let lbl = NSTextField::labelWithString(
                     &NSString::from_str(
@@ -1204,6 +1204,55 @@ impl VisualQA {
         }
         win.setContentView(Some(&root));
         win
+    }
+
+    /// Wait for the production asynchronous loader to install a document before
+    /// capturing it. The visual suite runs against disposable fixtures, but it
+    /// must still exercise the same loader as the application.
+    fn open_pdf_and_wait(app: &AppDelegate, url: &NSURL, path: &str) -> bool {
+        app.open_file_url(url);
+        let started = std::time::Instant::now();
+        while started.elapsed() < std::time::Duration::from_secs(5) {
+            if app
+                .ivars()
+                .tab_manager
+                .borrow()
+                .find_tab_by_path(path)
+                .is_some()
+            {
+                // Let PDFKit finish the first layout/display cycle before the
+                // suite closes a prior tab or swaps the active document again.
+                Self::pump_runloop(0.2);
+                return true;
+            }
+            Self::pump_runloop(0.02);
+        }
+        eprintln!("[QA_ASYNC_TIMEOUT] PDF did not finish loading: {}", path);
+        false
+    }
+
+    /// Materialize the disposable workspace fixture so tree-state screenshots
+    /// are deterministic even though normal workspace expansion remains lazy.
+    fn hydrate_fixture_tree(node: &crate::workspace::FileNode) {
+        if !node.ivars().is_dir.get() {
+            return;
+        }
+        node.load_children_sync();
+        let children = node.ivars().children.borrow().clone().unwrap_or_default();
+        for child in children {
+            Self::hydrate_fixture_tree(&child);
+        }
+    }
+
+    fn wait_for_table_rows(table: &objc2_app_kit::NSTableView, minimum: isize) -> isize {
+        let started = std::time::Instant::now();
+        loop {
+            let rows = unsafe { table.numberOfRows() };
+            if rows >= minimum || started.elapsed() >= std::time::Duration::from_secs(3) {
+                return rows;
+            }
+            Self::pump_runloop(0.02);
+        }
     }
 
     /// Position the backdrop window directly behind `target_win` and capture the real WindowServer composite.
@@ -1454,6 +1503,28 @@ impl VisualQA {
             ws_dir
         );
 
+        let qa_home = unsafe { objc2_foundation::NSHomeDirectory() }.to_string();
+        if !qa_home.starts_with("/tmp/") {
+            eprintln!(
+                "[QA_FIX_SUITE] Refusing to create disposable Home fixtures outside /tmp: {}",
+                qa_home
+            );
+            std::process::exit(1);
+        }
+        let local_fixture_dir = format!("{}/Documents", qa_home);
+        let icloud_fixture_dir =
+            format!("{}/Library/Mobile Documents/com~apple~CloudDocs", qa_home);
+        let _ = std::fs::create_dir_all(&local_fixture_dir);
+        let _ = std::fs::create_dir_all(&icloud_fixture_dir);
+        let _ = std::fs::copy(
+            &pdf_crypto,
+            format!("{}/Local_Visual_QA.pdf", local_fixture_dir),
+        );
+        let _ = std::fs::copy(
+            &pdf_glass,
+            format!("{}/iCloud_Visual_QA.pdf", icloud_fixture_dir),
+        );
+
         let seed_home_defaults = || unsafe {
             let defaults = NSUserDefaults::standardUserDefaults();
             let recents = objc2_foundation::NSArray::from_retained_slice(&[
@@ -1603,7 +1674,7 @@ impl VisualQA {
             .home_screen
             .get()
             .and_then(|h| h.main_table())
-            .map(|t| unsafe { t.numberOfRows() })
+            .map(|t| Self::wait_for_table_rows(&t, 1))
             .unwrap_or(0);
         record_shot(
             "06-home-local-files.png",
@@ -1622,7 +1693,7 @@ impl VisualQA {
             .home_screen
             .get()
             .and_then(|h| h.main_table())
-            .map(|t| unsafe { t.numberOfRows() })
+            .map(|t| Self::wait_for_table_rows(&t, 1))
             .unwrap_or(0);
         record_shot(
             "07-home-icloud-drive.png",
@@ -1641,7 +1712,7 @@ impl VisualQA {
             .home_screen
             .get()
             .and_then(|h| h.main_table())
-            .map(|t| unsafe { t.numberOfRows() })
+            .map(|t| Self::wait_for_table_rows(&t, 1))
             .unwrap_or(0);
         record_shot(
             "08-home-workspaces.png",
@@ -1797,7 +1868,7 @@ impl VisualQA {
         // =========================================================================
         resize_win(&window, 1100.0, 700.0);
         let url_crypto = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_crypto)) };
-        app.open_file_url(&url_crypto);
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         app.switch_sidebar_to_index(0);
         app.set_right_sidebar_width(230.0);
         if let Some(pv) = app.ivars().pdf_view.get() {
@@ -1902,7 +1973,18 @@ impl VisualQA {
         // =========================================================================
         let url_ws = unsafe { NSURL::fileURLWithPath(&NSString::from_str(ws_dir)) };
         app.open_folder_url(&url_ws);
-        app.open_file_url(&url_crypto);
+        if let Some(root) = app
+            .ivars()
+            .workspace_delegate
+            .get()
+            .and_then(|wd| wd.ivars().root_node.borrow().clone())
+        {
+            Self::hydrate_fixture_tree(&root);
+            if let Some(delegate) = app.ivars().workspace_delegate.get() {
+                delegate.reload_data();
+            }
+        }
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         if let Some(li) = app.ivars().explorer_item.get() {
             unsafe { li.setCollapsed(false) };
         }
@@ -2100,7 +2182,7 @@ impl VisualQA {
             unsafe { ov.selectRowIndexes_byExtendingSelection(&idx, false) };
         }
         let url_long = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_long)) };
-        app.open_file_url(&url_long);
+        Self::open_pdf_and_wait(app, &url_long, &pdf_long);
         while app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -2222,7 +2304,7 @@ impl VisualQA {
         }
 
         resize_win(&window, 1166.0, 740.0);
-        app.open_file_url(&url_crypto);
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         while app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -2348,7 +2430,7 @@ impl VisualQA {
             del.start_search(&NSString::from_str("protocol"));
         }
         let search_rows_32 = get_search_table()
-            .map(|t| unsafe { t.numberOfRows() })
+            .map(|t| Self::wait_for_table_rows(&t, 1))
             .unwrap_or(0);
         record_shot(
             "32-sidebar-search-results.png",
@@ -2447,7 +2529,7 @@ impl VisualQA {
 
         // 49-pages-many-thumbnails.png (8-page lecture deck at compact 195pt strip)
         let url_slides = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_slides)) };
-        app.open_file_url(&url_slides);
+        Self::open_pdf_and_wait(app, &url_slides, &pdf_slides);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -2470,7 +2552,7 @@ impl VisualQA {
 
         // 40-outline-no-outline-empty-state.png (Flat_Technical_Memo_No_Outline.pdf)
         let url_flat = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_flat)) };
-        app.open_file_url(&url_flat);
+        Self::open_pdf_and_wait(app, &url_flat, &pdf_flat);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -2498,7 +2580,7 @@ impl VisualQA {
 
         // 102-empty-outline.png (on Scanned_Historical_Manuscript_1978.pdf)
         let url_scanned = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_scanned)) };
-        app.open_file_url(&url_scanned);
+        Self::open_pdf_and_wait(app, &url_scanned, &pdf_scanned);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -2512,7 +2594,7 @@ impl VisualQA {
         );
 
         // Open Cryptographic_Protocol_Analysis.pdf for 103, 41..48
-        app.open_file_url(&url_crypto);
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -2551,7 +2633,7 @@ impl VisualQA {
             del.start_search(&NSString::from_str("cryptographic"));
         }
         let rows_42 = get_search_table()
-            .map(|t| unsafe { t.numberOfRows() })
+            .map(|t| Self::wait_for_table_rows(&t, 1))
             .unwrap_or(0);
         record_shot(
             "42-search-results.png",
@@ -2672,6 +2754,15 @@ impl VisualQA {
             false,
             vec![("Selected thumbnail on Page 6 of 6", true)],
         );
+
+        if std::env::var("IRIDESCENCE_QA_STOP_AFTER_SCROLL").is_ok() {
+            println!(
+                "[QA_SCROLL_TRACE_DONE] Search, thumbnail, and page navigation states captured"
+            );
+            NSApplication::sharedApplication(mtm).terminate(None);
+            return;
+        }
+
         app.set_right_sidebar_width(230.0);
 
         // =========================================================================
@@ -2681,7 +2772,7 @@ impl VisualQA {
         let url_zk = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_zk)) };
         let url_snark = unsafe { NSURL::fileURLWithPath(&NSString::from_str(&pdf_snark)) };
 
-        app.open_file_url(&url_crypto);
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         while app.ivars().tab_manager.borrow().tab_count() > 1 {
             let active = app.ivars().tab_manager.borrow().active_index;
             let to_close = if active == 0 { 1 } else { 0 };
@@ -2689,7 +2780,7 @@ impl VisualQA {
         }
 
         // Start with 2 tabs: Crypto + Glass
-        app.open_file_url(&url_glass);
+        Self::open_pdf_and_wait(app, &url_glass, &pdf_glass);
         record_shot(
             "50-tabs-two-documents.png",
             "Tabs",
@@ -2702,7 +2793,7 @@ impl VisualQA {
         );
 
         // 51-tabs-three-documents.png
-        app.open_file_url(&url_zk);
+        Self::open_pdf_and_wait(app, &url_zk, &pdf_zk);
         record_shot(
             "51-tabs-three-documents.png",
             "Tabs",
@@ -2729,10 +2820,10 @@ impl VisualQA {
 
         // 52-tabs-many-documents.png (open 4 more -> 7 tabs total, showing +2 overflow button!)
         resize_win(&window, 1020.0, 740.0);
-        app.open_file_url(&url_slides);
-        app.open_file_url(&url_flat);
-        app.open_file_url(&url_scanned);
-        app.open_file_url(&url_snark);
+        Self::open_pdf_and_wait(app, &url_slides, &pdf_slides);
+        Self::open_pdf_and_wait(app, &url_flat, &pdf_flat);
+        Self::open_pdf_and_wait(app, &url_scanned, &pdf_scanned);
+        Self::open_pdf_and_wait(app, &url_snark, &pdf_snark);
         record_shot(
             "52-tabs-many-documents.png",
             "Tabs",
@@ -2749,7 +2840,7 @@ impl VisualQA {
             app.close_tab_at_index(2);
         }
         resize_win(&window, 1142.0, 740.0);
-        app.open_file_url(&url_long);
+        Self::open_pdf_and_wait(app, &url_long, &pdf_long);
         record_shot(
             "54-tabs-long-filenames.png",
             "Tabs",
@@ -3011,7 +3102,7 @@ impl VisualQA {
         let _ = std::fs::copy(&pdf_crypto, annot_pdf);
         let url_annot = unsafe { NSURL::fileURLWithPath(&NSString::from_str(annot_pdf)) };
         resize_win(&window, 1142.0, 740.0);
-        app.open_file_url(&url_annot);
+        Self::open_pdf_and_wait(app, &url_annot, annot_pdf);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -3052,13 +3143,13 @@ impl VisualQA {
         unsafe {
             if let Some(layer) = ctx_menu_view.layer() {
                 let bg = NSColor::colorWithSRGBRed_green_blue_alpha(0.96, 0.96, 0.98, 0.96);
-                let cg: *const std::ffi::c_void = msg_send![&*bg, CGColor];
-                let _: () = msg_send![&*layer, setBackgroundColor: cg];
+                let cg = bg.CGColor();
+                let _: () = msg_send![&*layer, setBackgroundColor: Retained::as_ptr(&cg)];
                 let _: () = msg_send![&*layer, setCornerRadius: 8.0f64];
                 let _: () = msg_send![&*layer, setBorderWidth: 1.0f64];
                 let border = NSColor::separatorColor();
-                let bcg: *const std::ffi::c_void = msg_send![&*border, CGColor];
-                let _: () = msg_send![&*layer, setBorderColor: bcg];
+                let bcg = border.CGColor();
+                let _: () = msg_send![&*layer, setBorderColor: Retained::as_ptr(&bcg)];
             }
             let items = [
                 ("Highlight Selection", true),
@@ -3077,8 +3168,8 @@ impl VisualQA {
                     hi.setWantsLayer(true);
                     if let Some(hl) = hi.layer() {
                         let ac = NSColor::controlAccentColor();
-                        let acg: *const std::ffi::c_void = msg_send![&*ac, CGColor];
-                        let _: () = msg_send![&*hl, setBackgroundColor: acg];
+                        let acg = ac.CGColor();
+                        let _: () = msg_send![&*hl, setBackgroundColor: Retained::as_ptr(&acg)];
                         let _: () = msg_send![&*hl, setCornerRadius: 5.0f64];
                     }
                     ctx_menu_view.addSubview(&hi);
@@ -3227,7 +3318,7 @@ impl VisualQA {
         );
 
         // 86-annotation-unsaved-state.png (open 2nd tab so dirty dot + Edited title are both visible!)
-        app.open_file_url(&url_glass);
+        Self::open_pdf_and_wait(app, &url_glass, &pdf_glass);
         app.switch_to_tab_index(0);
         app.mark_document_edited(true);
         record_shot(
@@ -3265,7 +3356,7 @@ impl VisualQA {
         // =========================================================================
         // 11. OCR STATES (91, 88, 89, 90)
         // =========================================================================
-        app.open_file_url(&url_scanned);
+        Self::open_pdf_and_wait(app, &url_scanned, &pdf_scanned);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -3332,7 +3423,7 @@ impl VisualQA {
         // =========================================================================
         // 12. FOCUS MODE, PRESENTATION MODE & DEBUG CONSOLE (92..96)
         // =========================================================================
-        app.open_file_url(&url_crypto);
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }
@@ -3495,7 +3586,18 @@ impl VisualQA {
 
         // Restore demo workspace
         app.open_folder_url(&url_ws);
-        app.open_file_url(&url_crypto);
+        if let Some(root) = app
+            .ivars()
+            .workspace_delegate
+            .get()
+            .and_then(|wd| wd.ivars().root_node.borrow().clone())
+        {
+            Self::hydrate_fixture_tree(&root);
+            if let Some(delegate) = app.ivars().workspace_delegate.get() {
+                delegate.reload_data();
+            }
+        }
+        Self::open_pdf_and_wait(app, &url_crypto, &pdf_crypto);
         if app.ivars().tab_manager.borrow().tab_count() > 1 {
             app.close_tab_at_index(0);
         }

@@ -128,6 +128,13 @@ define_class!(
             }
         }
 
+        #[unsafe(method(mouseEntered:))]
+        fn mouse_entered(&self, _event: &objc2_app_kit::NSEvent) {
+            if let Some(tv) = self.ivars().table_view.get() {
+                self.ivars().hover_coordinator.update_hover(tv);
+            }
+        }
+
         #[unsafe(method(mouseExited:))]
         fn mouse_exited(&self, _event: &objc2_app_kit::NSEvent) {
             if let Some(tv) = self.ivars().table_view.get() {
@@ -1803,5 +1810,20 @@ pub mod tests {
             let sub_out = format_path_subtitle(&outside, Some(ws));
             assert_eq!(sub_out, "~/Desktop");
         }
+    }
+
+    #[test]
+    fn test_tracking_area_owner_implements_all_enter_exit_callbacks() {
+        let mtm = unsafe { MainThreadMarker::new_unchecked() };
+        let delegate = CommandPaletteDelegate::new(mtm);
+
+        let entered: bool =
+            unsafe { msg_send![&delegate, respondsToSelector: objc2::sel!(mouseEntered:)] };
+        let moved: bool =
+            unsafe { msg_send![&delegate, respondsToSelector: objc2::sel!(mouseMoved:)] };
+        let exited: bool =
+            unsafe { msg_send![&delegate, respondsToSelector: objc2::sel!(mouseExited:)] };
+
+        assert!(entered && moved && exited);
     }
 }
