@@ -2,14 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [main, master]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [main, master]
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
-    name: Build & Test on macOS
-    runs-on: macos-latest
+  macos-build-and-test:
+    name: Build & Test (macOS)
+    runs-on: macos-14
 
     steps:
       - name: Check out repository
@@ -19,6 +22,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: aarch64-apple-darwin
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
@@ -28,22 +32,30 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target.nosync/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Check formatting
+      - name: Verify code formatting
         run: cargo fmt --check
 
-      - name: Compile and check
-        run: cargo check
+      - name: Run clippy linter
+        run: cargo clippy -- -D warnings
 
-      - name: Run unit tests
+      - name: Run automated test suite
         run: cargo test
-
-      - name: Run clippy
-        run: cargo clippy
 
       - name: Verify application bundle build
         run: ./build_app.sh
+
+      - name: Verify bundle integrity and structure
+        run: |
+          set -euo pipefail
+          APP_PATH="Iridecence PDF Reader.app"
+          test -d "$APP_PATH"
+          test -f "$APP_PATH/Contents/Info.plist"
+          test -x "$APP_PATH/Contents/MacOS/oxireader"
+          test -f "$APP_PATH/Contents/Resources/AppIcon.icns"
+          plutil -lint "$APP_PATH/Contents/Info.plist"
+          codesign --verify --deep --strict "$APP_PATH"
+          echo "✓ Application bundle verified successfully."

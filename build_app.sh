@@ -1,16 +1,23 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 PROFILE="${PROFILE:-release}"
 APP_BUNDLE="Iridecence PDF Reader.app"
-if [ "$PROFILE" = "release" ]; then
+UNIVERSAL="${UNIVERSAL:-0}"
+VERSION=$(grep -m1 '^version' Cargo.toml | cut -d '"' -f 2)
+
+echo "=== Building Iridescence PDF Reader v${VERSION} (${PROFILE}) ==="
+
+if [ "$UNIVERSAL" = "1" ]; then
+    echo "Building Universal 2 binary (aarch64 + x86_64)..."
+    CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build --release --target aarch64-apple-darwin
+    CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build --release --target x86_64-apple-darwin
+elif [ "$PROFILE" = "release" ]; then
     echo "Building release binary..."
     CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build --release
-    BIN_PATH="/tmp/target/release/oxireader"
 else
     echo "Building debug binary..."
     CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo build
-    BIN_PATH="/tmp/target/debug/oxireader"
 fi
 
 echo "Creating App Bundle structure..."
@@ -18,14 +25,26 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
-echo "Copying binary ($BIN_PATH)..."
-cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/oxireader"
+if [ "$UNIVERSAL" = "1" ]; then
+    lipo -create \
+        /tmp/target/aarch64-apple-darwin/release/oxireader \
+        /tmp/target/x86_64-apple-darwin/release/oxireader \
+        -output "$APP_BUNDLE/Contents/MacOS/oxireader"
+    echo "Universal 2 binary assembled:"
+    file "$APP_BUNDLE/Contents/MacOS/oxireader"
+elif [ "$PROFILE" = "release" ]; then
+    cp "/tmp/target/release/oxireader" "$APP_BUNDLE/Contents/MacOS/oxireader"
+else
+    cp "/tmp/target/debug/oxireader" "$APP_BUNDLE/Contents/MacOS/oxireader"
+fi
+
+chmod +x "$APP_BUNDLE/Contents/MacOS/oxireader"
 
 echo "Copying icon..."
 cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 
-echo "Creating Info.plist..."
-cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
+echo "Creating Info.plist for v${VERSION}..."
+cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -41,13 +60,13 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.5.1</string>
+    <string>${VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>6</string>
+    <string>${VERSION}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
@@ -83,4 +102,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
-echo "Done! Run: open '$APP_BUNDLE'"
+echo "Stripping extended attributes & ad-hoc signing..."
+xattr -cr "$APP_BUNDLE"
+codesign --force --deep --sign - "$APP_BUNDLE"
+codesign --verify --deep --strict --verbose=1 "$APP_BUNDLE"
+
+echo "✓ Done! Application bundle verified at: $APP_BUNDLE"
