@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+@preconcurrency import Dispatch
 
 @MainActor
 public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
