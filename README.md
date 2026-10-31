@@ -63,17 +63,26 @@
 - **Architecture**: Apple Silicon (`arm64`, M1/M2/M3/M4) native. Intel (`x86_64`) supported via source compilation.
 - **RAM**: 50 MB baseline memory footprint.
 - **Storage**: ~10 MB for application installation.
+- **Privileges**: Standard user account. Iridescence PDF Reader does not require administrator privileges or root access.
+- **Sandboxing**: Runs as a standard macOS user-space application (non-sandboxed) to allow reading documents across user-selected workspace folders and iCloud Drive paths without container confinement.
 
 ---
 
 ## 5. Installation Instructions
 
 1. Download the latest release `.dmg` from the **[GitHub Releases](https://github.com/gobelet69/iridecence-pdf-reader/releases/latest)** page:
-   - `Iridecence-PDF-Reader-v0.5.1-macOS-arm64.dmg`
-2. Open the downloaded `.dmg` file.
+   - `Iridescence-PDF-Reader-v2.0.0-macOS-arm64.dmg`
+2. Open the downloaded `.dmg` disk image.
 3. Drag **Iridecence PDF Reader.app** into your `/Applications` directory.
-4. Launch the application from Launchpad, Spotlight, or the Applications folder.
-5. *Note on initial launch*: If Gatekeeper prompts about Developer ID verification on an ad-hoc or unsigned community build, right-click the application icon and select **Open**, then confirm.
+4. Launch the application from Launchpad, Spotlight, or `/Applications`.
+5. **macOS Gatekeeper Verification (Non-Notarised Builds)**:
+   Because releases are ad-hoc signed without an Apple Developer ID subscription, macOS Gatekeeper may present a dialog on first launch (*"Iridecence PDF Reader cannot be opened because Apple cannot check it for malicious software"*). To safely open the application:
+   - **Via Finder**: Right-click (or Control-click) **Iridecence PDF Reader.app** in `/Applications`, choose **Open**, and click **Open** in the confirmation alert. Alternatively, navigate to **System Settings → Privacy & Security** and click **Open Anyway**.
+   - **Via Terminal** (optional): Clear the quarantine extended attribute:
+     ```bash
+     xattr -d com.apple.quarantine "/Applications/Iridecence PDF Reader.app"
+     ```
+   Once opened, macOS permanently remembers your choice, and subsequent launches start instantly without warnings.
 
 ---
 
