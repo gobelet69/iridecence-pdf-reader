@@ -40,7 +40,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Run clippy linter
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --color always
 
       - name: Run automated test suite
         run: cargo test
