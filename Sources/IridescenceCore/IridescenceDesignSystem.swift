@@ -7,9 +7,9 @@ import Foundation
 /// Increase Contrast, and Reduce Transparency accessibility settings.
 public enum IridescenceDesign {
 
-    // MARK: - Dynamic Spectral Palette
+    // MARK: - Dynamic Spectral Palette (Synced with 111iridescence v2.1 Homepage Matrix)
 
-    /// Primary Iridescence Violet (`#6D4AFF` in Light, `#9478FF` in Dark)
+    /// Primary Iridescence Deep Violet (`#702EE4` in Light, `#9478FF` in Dark)
     public static var primaryViolet: NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -17,41 +17,51 @@ public enum IridescenceDesign {
             if highContrast {
                 return isDark
                     ? NSColor(srgbRed: 0.68, green: 0.58, blue: 1.00, alpha: 1.0)
-                    : NSColor(srgbRed: 0.34, green: 0.18, blue: 0.86, alpha: 1.0)
+                    : NSColor(srgbRed: 0.34, green: 0.14, blue: 0.78, alpha: 1.0)
             }
             return isDark
-                ? NSColor(srgbRed: 0.58, green: 0.47, blue: 1.00, alpha: 1.0)
-                : NSColor(srgbRed: 0.43, green: 0.29, blue: 0.96, alpha: 1.0)
+                ? NSColor(srgbRed: 0.580, green: 0.471, blue: 1.000, alpha: 1.0)
+                : NSColor(srgbRed: 0.439, green: 0.180, blue: 0.894, alpha: 1.0)
         }
     }
 
-    /// Deep Indigo Accent (`#4638E8` in Light, `#6E68FF` in Dark)
+    /// Homepage Prefix Electric Blue (`#2266F2` in Light, `#60A5FA` in Dark)
     public static var secondaryIndigo: NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark
-                ? NSColor(srgbRed: 0.43, green: 0.41, blue: 1.00, alpha: 1.0)
-                : NSColor(srgbRed: 0.27, green: 0.22, blue: 0.91, alpha: 1.0)
+                ? NSColor(srgbRed: 0.376, green: 0.647, blue: 0.980, alpha: 1.0)
+                : NSColor(srgbRed: 0.133, green: 0.400, blue: 0.949, alpha: 1.0)
         }
     }
 
-    /// Luminous Spectral Cyan (`#0891B2` in Light, `#38BDF8` in Dark)
+    /// Luminous Spectral Cyan (`#0CC0E8` in Light, `#38BDF8` in Dark)
     public static var accentCyan: NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark
-                ? NSColor(srgbRed: 0.22, green: 0.78, blue: 0.98, alpha: 1.0)
-                : NSColor(srgbRed: 0.03, green: 0.57, blue: 0.75, alpha: 1.0)
+                ? NSColor(srgbRed: 0.220, green: 0.741, blue: 0.973, alpha: 1.0)
+                : NSColor(srgbRed: 0.047, green: 0.753, blue: 0.910, alpha: 1.0)
         }
     }
 
-    /// Soft Iridescent Rose / Magenta (`#DB2777` in Light, `#F472B6` in Dark)
+    /// Subtle Iridescent Magenta (`#DC3EA0` in Light, `#F472B6` in Dark)
     public static var accentRose: NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark
-                ? NSColor(srgbRed: 0.96, green: 0.45, blue: 0.71, alpha: 1.0)
-                : NSColor(srgbRed: 0.86, green: 0.18, blue: 0.49, alpha: 1.0)
+                ? NSColor(srgbRed: 0.957, green: 0.447, blue: 0.714, alpha: 1.0)
+                : NSColor(srgbRed: 0.863, green: 0.243, blue: 0.627, alpha: 1.0)
+        }
+    }
+
+    /// Controlled Turquoise (`#12CCB8` in Light, `#2DD4BF` in Dark)
+    public static var controlledTurquoise: NSColor {
+        NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(srgbRed: 0.176, green: 0.831, blue: 0.749, alpha: 1.0)
+                : NSColor(srgbRed: 0.071, green: 0.800, blue: 0.722, alpha: 1.0)
         }
     }
 
@@ -285,41 +295,102 @@ public final class IridescentEmblemView: NSView {
         let b = bounds.insetBy(dx: 1.0, dy: 1.0)
         guard b.width > 8.0, b.height > 8.0 else { return }
 
-        let radius = min(b.width, b.height) * 0.26
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let radius = min(b.width, b.height) * 0.24
         let outerPath = NSBezierPath(roundedRect: b, xRadius: radius, yRadius: radius)
 
-        let c1 = IridescenceDesign.primaryViolet
-        let c2 = IridescenceDesign.secondaryIndigo
-        let c3 = IridescenceDesign.accentCyan
-        let c4 = IridescenceDesign.accentRose
-
-        if let grad = NSGradient(colors: [c1, c2, c3, c4], atLocations: [0.0, 0.38, 0.75, 1.0], colorSpace: .sRGB) {
-            grad.draw(in: outerPath, angle: 35.0)
+        // Luminous Pearl squircle base (or Deep Obsidian in dark mode)
+        let baseStart = isDark
+            ? NSColor(srgbRed: 0.14, green: 0.11, blue: 0.20, alpha: 1.0)
+            : NSColor(srgbRed: 1.00, green: 1.00, blue: 1.00, alpha: 1.0)
+        let baseEnd = isDark
+            ? NSColor(srgbRed: 0.09, green: 0.07, blue: 0.13, alpha: 1.0)
+            : NSColor(srgbRed: 0.94, green: 0.92, blue: 0.97, alpha: 1.0)
+        if let grad = NSGradient(starting: baseStart, ending: baseEnd) {
+            grad.draw(in: outerPath, angle: -90.0)
         } else {
-            c1.setFill()
+            baseStart.setFill()
             outerPath.fill()
         }
 
-        // Inner specular border
-        NSColor.white.withAlphaComponent(0.38).setStroke()
+        IridescenceDesign.primaryViolet.withAlphaComponent(isDark ? 0.45 : 0.22).setStroke()
         outerPath.lineWidth = 1.0
         outerPath.stroke()
 
-        // Crisp white page + prism lines inside emblem
-        let docRect = b.insetBy(dx: b.width * 0.24, dy: b.height * 0.20)
-        let docPath = NSBezierPath(roundedRect: docRect, xRadius: 3.5, yRadius: 3.5)
-        NSColor.white.withAlphaComponent(0.95).setFill()
+        // Inner folio document card
+        let docRect = b.insetBy(dx: b.width * 0.14, dy: b.height * 0.12)
+        let docRadius = max(3.0, docRect.width * 0.12)
+        let docPath = NSBezierPath(roundedRect: docRect, xRadius: docRadius, yRadius: docRadius)
+        NSColor.white.withAlphaComponent(isDark ? 0.94 : 1.0).setFill()
         docPath.fill()
 
-        // Spectral lines inside page
-        let lineColors = [c1, c3, c4]
-        for (idx, lineColor) in lineColors.enumerated() {
-            let y = docRect.maxY - CGFloat(idx + 1) * (docRect.height * 0.23)
-            let w = idx == 2 ? docRect.width * 0.45 : docRect.width * 0.65
-            let lineRect = NSRect(x: docRect.minX + docRect.width * 0.17, y: y, width: w, height: 2.2)
-            let linePath = NSBezierPath(roundedRect: lineRect, xRadius: 1.1, yRadius: 1.1)
-            lineColor.setFill()
-            linePath.fill()
+        let obsidian = NSColor(srgbRed: 0.086, green: 0.063, blue: 0.114, alpha: 1.0)
+        obsidian.withAlphaComponent(0.85).setStroke()
+        docPath.lineWidth = 1.0
+        docPath.stroke()
+
+        // Left Obsidian pixel-grid reading spine
+        let spineWidth = max(6.0, floor(docRect.width * 0.26))
+        let spineRect = NSRect(x: docRect.minX, y: docRect.minY, width: spineWidth, height: docRect.height)
+        NSGraphicsContext.saveGraphicsState()
+        docPath.addClip()
+        obsidian.setFill()
+        spineRect.fill()
+
+        // Grid-locked spectral pixel cells inside spine (5 rows)
+        let rows = 5
+        let cellW = max(2.0, floor((spineWidth - 3.0) * 0.55))
+        let cellH = max(2.0, floor((docRect.height - 6.0) / CGFloat(rows) - 1.5))
+        let spineColors = [
+            IridescenceDesign.accentCyan,
+            IridescenceDesign.secondaryIndigo,
+            IridescenceDesign.primaryViolet,
+            IridescenceDesign.primaryViolet,
+            IridescenceDesign.controlledTurquoise
+        ]
+        for r in 0..<rows {
+            let cy = docRect.maxY - 3.0 - CGFloat(r + 1) * (cellH + 1.2)
+            let cx = spineRect.minX + floor((spineWidth - cellW) * 0.5)
+            spineColors[r].setFill()
+            NSBezierPath(roundedRect: NSRect(x: cx, y: cy, width: cellW, height: cellH), xRadius: 0.8, yRadius: 0.8).fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        // Right page content: structured reading bars + top-right 5-cell pixel star (`cross-5`)
+        let contentMinX = spineRect.maxX + max(2.5, docRect.width * 0.08)
+        let contentMaxW = max(4.0, docRect.maxX - contentMinX - 3.0)
+
+        // Highlight callout bar
+        let calloutY = docRect.minY + docRect.height * 0.50
+        let calloutRect = NSRect(x: contentMinX, y: calloutY, width: contentMaxW * 0.88, height: max(3.0, docRect.height * 0.16))
+        IridescenceDesign.primaryViolet.withAlphaComponent(0.18).setFill()
+        NSBezierPath(roundedRect: calloutRect, xRadius: 1.5, yRadius: 1.5).fill()
+
+        // Reading lines
+        let lineYs: [CGFloat] = [0.74, 0.34, 0.20]
+        let lineWs: [CGFloat] = [0.52, 0.82, 0.64]
+        for i in 0..<lineYs.count {
+            let ly = docRect.minY + docRect.height * lineYs[i]
+            let lw = contentMaxW * lineWs[i]
+            let lRect = NSRect(x: contentMinX, y: ly, width: lw, height: max(1.6, docRect.height * 0.065))
+            (i == 0 ? obsidian : obsidian.withAlphaComponent(0.65)).setFill()
+            NSBezierPath(roundedRect: lRect, xRadius: 0.8, yRadius: 0.8).fill()
+        }
+
+        // Signature 5-cell pixel cross star (`cross-5`) in upper right of page
+        let px = max(1.5, floor(docRect.width * 0.055))
+        let starCx = docRect.maxX - px * 2.6
+        let starCy = docRect.maxY - px * 2.6
+        let starOffsets: [(CGFloat, CGFloat, NSColor)] = [
+            (0, 0, IridescenceDesign.accentCyan),
+            (0, 1, IridescenceDesign.secondaryIndigo),
+            (-1, 0, IridescenceDesign.primaryViolet),
+            (1, 0, IridescenceDesign.accentRose),
+            (0, -1, IridescenceDesign.primaryViolet)
+        ]
+        for (dx, dy, color) in starOffsets {
+            color.setFill()
+            NSRect(x: starCx + dx * px, y: starCy + dy * px, width: px * 0.88, height: px * 0.88).fill()
         }
     }
 }
