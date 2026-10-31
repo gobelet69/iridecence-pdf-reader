@@ -1,0 +1,311 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000010000000000000001 /* UIConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001 /* UIConstants.swift */; };
+		A10000020000000000000001 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000020000000000000001 /* Logger.swift */; };
+		A10000030000000000000001 /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000030000000000000001 /* WindowGeometry.swift */; };
+		A10000040000000000000001 /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000040000000000000001 /* SettingsManager.swift */; };
+		A10000050000000000000001 /* GlassTableRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000050000000000000001 /* GlassTableRowView.swift */; };
+		A10000060000000000000001 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000060000000000000001 /* EmptyStateView.swift */; };
+		A10000070000000000000001 /* BookmarksManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000070000000000000001 /* BookmarksManager.swift */; };
+		A10000080000000000000001 /* AnnotationsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000080000000000000001 /* AnnotationsManager.swift */; };
+		A10000090000000000000001 /* BookmarksInspectorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000090000000000000001 /* BookmarksInspectorController.swift */; };
+		A10000100000000000000001 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000100000000000000001 /* WorkspaceModel.swift */; };
+		A10000110000000000000001 /* WorkspaceOutlineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000110000000000000001 /* WorkspaceOutlineController.swift */; };
+		A10000120000000000000001 /* WorkspaceIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000120000000000000001 /* WorkspaceIndex.swift */; };
+		A10000130000000000000001 /* TabManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000130000000000000001 /* TabManager.swift */; };
+		A10000140000000000000001 /* PDFOutlineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000140000000000000001 /* PDFOutlineController.swift */; };
+		A10000150000000000000001 /* PDFSearchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000150000000000000001 /* PDFSearchController.swift */; };
+		A10000160000000000000001 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000160000000000000001 /* OCRService.swift */; };
+		A10000170000000000000001 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000170000000000000001 /* CommandPaletteController.swift */; };
+		A10000180000000000000001 /* HomeScreenController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000180000000000000001 /* HomeScreenController.swift */; };
+		A10000190000000000000001 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000190000000000000001 /* SettingsWindowController.swift */; };
+		A10000200000000000000001 /* DebugConsoleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000200000000000000001 /* DebugConsoleController.swift */; };
+		A10000210000000000000001 /* UtilityWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000210000000000000001 /* UtilityWindows.swift */; };
+		A10000220000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000220000000000000001 /* AppDelegate.swift */; };
+		A10000230000000000000001 /* VisualQAHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000230000000000000001 /* VisualQAHarness.swift */; };
+		A10000240000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000240000000000000001 /* main.swift */; };
+		A10000250000000000000001 /* IridescenceDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000250000000000000001 /* IridescenceDesignSystem.swift */; };
+		A10000260000000000000001 /* PDFPageThumbnailController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000260000000000000001 /* PDFPageThumbnailController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000010000000000000001 /* UIConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIConstants.swift; sourceTree = "<group>"; };
+		A20000020000000000000001 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		A20000030000000000000001 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
+		A20000040000000000000001 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
+		A20000050000000000000001 /* GlassTableRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTableRowView.swift; sourceTree = "<group>"; };
+		A20000060000000000000001 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		A20000070000000000000001 /* BookmarksManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarksManager.swift; sourceTree = "<group>"; };
+		A20000080000000000000001 /* AnnotationsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationsManager.swift; sourceTree = "<group>"; };
+		A20000090000000000000001 /* BookmarksInspectorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarksInspectorController.swift; sourceTree = "<group>"; };
+		A20000100000000000000001 /* WorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
+		A20000110000000000000001 /* WorkspaceOutlineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceOutlineController.swift; sourceTree = "<group>"; };
+		A20000120000000000000001 /* WorkspaceIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceIndex.swift; sourceTree = "<group>"; };
+		A20000130000000000000001 /* TabManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManager.swift; sourceTree = "<group>"; };
+		A20000140000000000000001 /* PDFOutlineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFOutlineController.swift; sourceTree = "<group>"; };
+		A20000150000000000000001 /* PDFSearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFSearchController.swift; sourceTree = "<group>"; };
+		A20000160000000000000001 /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
+		A20000170000000000000001 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
+		A20000180000000000000001 /* HomeScreenController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenController.swift; sourceTree = "<group>"; };
+		A20000190000000000000001 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		A20000200000000000000001 /* DebugConsoleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConsoleController.swift; sourceTree = "<group>"; };
+		A20000210000000000000001 /* UtilityWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtilityWindows.swift; sourceTree = "<group>"; };
+		A20000220000000000000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A20000230000000000000001 /* VisualQAHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualQAHarness.swift; sourceTree = "<group>"; };
+		A20000240000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		A20000250000000000000001 /* IridescenceDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IridescenceDesignSystem.swift; sourceTree = "<group>"; };
+		A20000260000000000000001 /* PDFPageThumbnailController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageThumbnailController.swift; sourceTree = "<group>"; };
+		A30000010000000000000001 /* Iridescence */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Iridescence; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A40000010000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A50000010000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A50000020000000000000001 /* Sources */,
+				A50000050000000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A50000020000000000000001 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A50000030000000000000001 /* IridescenceCore */,
+				A50000040000000000000001 /* IridescenceApp */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		A50000030000000000000001 /* IridescenceCore */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000001 /* UIConstants.swift */,
+				A20000020000000000000001 /* Logger.swift */,
+				A20000030000000000000001 /* WindowGeometry.swift */,
+				A20000040000000000000001 /* SettingsManager.swift */,
+				A20000050000000000000001 /* GlassTableRowView.swift */,
+				A20000060000000000000001 /* EmptyStateView.swift */,
+				A20000070000000000000001 /* BookmarksManager.swift */,
+				A20000080000000000000001 /* AnnotationsManager.swift */,
+				A20000090000000000000001 /* BookmarksInspectorController.swift */,
+				A20000100000000000000001 /* WorkspaceModel.swift */,
+				A20000110000000000000001 /* WorkspaceOutlineController.swift */,
+				A20000120000000000000001 /* WorkspaceIndex.swift */,
+				A20000130000000000000001 /* TabManager.swift */,
+				A20000140000000000000001 /* PDFOutlineController.swift */,
+				A20000150000000000000001 /* PDFSearchController.swift */,
+				A20000160000000000000001 /* OCRService.swift */,
+				A20000170000000000000001 /* CommandPaletteController.swift */,
+				A20000180000000000000001 /* HomeScreenController.swift */,
+				A20000190000000000000001 /* SettingsWindowController.swift */,
+				A20000200000000000000001 /* DebugConsoleController.swift */,
+				A20000210000000000000001 /* UtilityWindows.swift */,
+				A20000220000000000000001 /* AppDelegate.swift */,
+				A20000230000000000000001 /* VisualQAHarness.swift */,
+				A20000250000000000000001 /* IridescenceDesignSystem.swift */,
+				A20000260000000000000001 /* PDFPageThumbnailController.swift */,
+			);
+			path = IridescenceCore;
+			sourceTree = "<group>";
+		};
+		A50000040000000000000001 /* IridescenceApp */ = {
+			isa = PBXGroup;
+			children = (
+				A20000240000000000000001 /* main.swift */,
+			);
+			path = IridescenceApp;
+			sourceTree = "<group>";
+		};
+		A50000050000000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A30000010000000000000001 /* Iridescence */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A60000010000000000000001 /* Iridescence */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000020000000000000001 /* Build configuration list for PBXNativeTarget "Iridescence" */;
+			buildPhases = (
+				A70000010000000000000001 /* Sources */,
+				A40000010000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Iridescence;
+			productName = Iridescence;
+			productReference = A30000010000000000000001 /* Iridescence */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A90000010000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = A80000010000000000000001 /* Build configuration list for PBXProject "Iridescence" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = A50000010000000000000001;
+			productRefGroup = A50000050000000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A60000010000000000000001 /* Iridescence */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A70000010000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000001 /* UIConstants.swift in Sources */,
+				A10000020000000000000001 /* Logger.swift in Sources */,
+				A10000030000000000000001 /* WindowGeometry.swift in Sources */,
+				A10000040000000000000001 /* SettingsManager.swift in Sources */,
+				A10000050000000000000001 /* GlassTableRowView.swift in Sources */,
+				A10000060000000000000001 /* EmptyStateView.swift in Sources */,
+				A10000070000000000000001 /* BookmarksManager.swift in Sources */,
+				A10000080000000000000001 /* AnnotationsManager.swift in Sources */,
+				A10000090000000000000001 /* BookmarksInspectorController.swift in Sources */,
+				A10000100000000000000001 /* WorkspaceModel.swift in Sources */,
+				A10000110000000000000001 /* WorkspaceOutlineController.swift in Sources */,
+				A10000120000000000000001 /* WorkspaceIndex.swift in Sources */,
+				A10000130000000000000001 /* TabManager.swift in Sources */,
+				A10000140000000000000001 /* PDFOutlineController.swift in Sources */,
+				A10000150000000000000001 /* PDFSearchController.swift in Sources */,
+				A10000160000000000000001 /* OCRService.swift in Sources */,
+				A10000170000000000000001 /* CommandPaletteController.swift in Sources */,
+				A10000180000000000000001 /* HomeScreenController.swift in Sources */,
+				A10000190000000000000001 /* SettingsWindowController.swift in Sources */,
+				A10000200000000000000001 /* DebugConsoleController.swift in Sources */,
+				A10000210000000000000001 /* UtilityWindows.swift in Sources */,
+				A10000220000000000000001 /* AppDelegate.swift in Sources */,
+				A10000230000000000000001 /* VisualQAHarness.swift in Sources */,
+				A10000240000000000000001 /* main.swift in Sources */,
+				A10000250000000000000001 /* IridescenceDesignSystem.swift in Sources */,
+				A10000260000000000000001 /* PDFPageThumbnailController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000010000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA0000020000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		AA0000030000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA0000040000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A80000010000000000000001 /* Build configuration list for PBXProject "Iridescence" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000010000000000000001 /* Debug */,
+				AA0000020000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000020000000000000001 /* Build configuration list for PBXNativeTarget "Iridescence" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000030000000000000001 /* Debug */,
+				AA0000040000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A90000010000000000000001 /* Project object */;
+}

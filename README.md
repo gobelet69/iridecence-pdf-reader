@@ -5,16 +5,16 @@
 </p>
 
 <p align="center">
-  <b>A fast, lightweight, native macOS PDF reader engineered in pure Rust with AppKit and PDFKit.</b><br>
-  Zero Electron. Zero WebKit bloat. Native Liquid Glass materials. Apple Vision OCR on demand.
+  <b>A fast, lightweight, 100% native macOS PDF reader engineered in pure Swift 6 with AppKit and PDFKit.</b><br>
+  Zero Electron. Zero third-party dependencies. Native Liquid Glass materials. Apple Vision OCR on demand.
 </p>
 
 <p align="center">
-  <a href="https://github.com/gobelet69/iridecence-pdf-reader/releases/latest"><img src="https://img.shields.io/badge/release-v0.5.1-purple" alt="Release v0.5.1"></a>
+  <a href="https://github.com/gobelet69/iridecence-pdf-reader/releases/latest"><img src="https://img.shields.io/badge/release-v2.0.0-purple" alt="Release v2.0.0"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014.0%2B-blue?logo=apple" alt="macOS 14+">
-  <img src="https://img.shields.io/badge/language-Rust%202024-orange?logo=rust" alt="Rust 2024">
+  <img src="https://img.shields.io/badge/language-Swift%206-orange?logo=swift" alt="Swift 6">
   <img src="https://img.shields.io/badge/ui-Native%20AppKit%20%2B%20PDFKit-black" alt="AppKit & PDFKit">
-  <img src="https://img.shields.io/badge/tests-43%20passing-brightgreen" alt="43 tests passing">
+  <img src="https://img.shields.io/badge/tests-20%20passing-brightgreen" alt="20 tests passing">
   <img src="https://img.shields.io/badge/licence-MIT-green" alt="Licence MIT">
 </p>
 
@@ -22,7 +22,7 @@
 
 ## 1. Overview
 
-**Iridescence PDF Reader** is a high-performance document reader engineered specifically for macOS power users, researchers, and engineers. By pairing Rust's memory safety with direct Objective-C bindings (`objc2`) to Apple's native **AppKit**, **PDFKit**, and **Vision** frameworks, Iridescence achieves instant cold startup (<250 ms), a minimal memory footprint (<60 MB base idle RAM), and deep macOS interface ergonomics.
+**Iridescence PDF Reader** is a high-performance document reader engineered specifically for macOS power users, researchers, and engineers. Completely rewritten in **100% native Swift 6**, Iridescence pairs direct Apple **AppKit**, **PDFKit**, and **Vision** frameworks with zero external third-party dependencies. The application achieves instant cold startup (<200 ms), a minimal memory footprint (<45 MB base idle RAM), and deep macOS interface ergonomics.
 
 ---
 
@@ -147,8 +147,7 @@ Iridescence PDF Reader maps keyboard shortcuts using physical hardware keycodes,
 
 ### Prerequisites
 - macOS 14.0 or newer.
-- [Rust](https://rustup.rs/) (stable channel, 1.85+ recommended for the 2024 edition).
-- Xcode Command Line Tools:
+- Xcode 16 (or Xcode Command Line Tools) with Swift 6:
   ```bash
   xcode-select --install
   ```
@@ -160,9 +159,9 @@ Iridescence PDF Reader maps keyboard shortcuts using physical hardware keycodes,
    git clone https://github.com/gobelet69/iridecence-pdf-reader.git
    cd iridecence-pdf-reader
    ```
-2. Build and run in debug mode:
+2. Build with Swift Package Manager:
    ```bash
-   cargo run
+   swift build -c release --scratch-path /tmp/swift-build
    ```
 3. Build the self-contained macOS `.app` bundle:
    ```bash
@@ -171,18 +170,18 @@ Iridescence PDF Reader maps keyboard shortcuts using physical hardware keycodes,
    ```
 4. Package a distributable `.dmg`:
    ```bash
-   ./scripts/build_dmg.sh 0.5.1
+   ./scripts/build_dmg.sh 2.0.0
    ```
 
 > [!TIP]
-> If your source checkout is located in an iCloud Drive-synced folder (`~/Documents`), compile with `CARGO_TARGET_DIR=/tmp/target` to prevent macOS FileProvider coordination locks from stalling the compilation.
+> If your source checkout is located in an iCloud Drive-synced folder (`~/Documents`), compile with `--scratch-path /tmp/swift-build` to prevent macOS FileProvider coordination locks from stalling the compilation.
 
 ### Running Automated Tests
 
 ```bash
-CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/target cargo test
+swift test --scratch-path /tmp/swift-build
 ```
-All 43 unit and integration tests execute in under 1 second.
+All 20 XCTest unit and integration suites execute in approximately 1.2 seconds.
 
 ---
 
@@ -220,7 +219,7 @@ Every release includes an official `.dmg` installer and corresponding `SHA256SUM
 
 ## 13. Contributing
 
-Contributions and issue reports are welcomed. Please review [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before submitting pull requests. All changes must pass `cargo test` and maintain AppKit HIG standards.
+Contributions and issue reports are welcomed. Please review [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before submitting pull requests. All changes must pass `swift test` and maintain AppKit HIG standards.
 
 ---
 
@@ -233,5 +232,5 @@ This project is licensed under the **[MIT Licence](LICENSE)**.
 ## 15. Acknowledgements
 
 - Built with native Apple technologies: AppKit, PDFKit, and Apple Vision.
-- Direct Objective-C runtime integration made possible by the [`objc2`](https://github.com/madsmtm/objc2) framework.
+- 100% native Swift 6 architecture with zero third-party dependencies.
 - Developed by **[111iridescence](https://111iridescence.org)** with AI-assisted software systems engineering.

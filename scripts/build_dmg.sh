@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${1:-$(grep -m1 '^version' Cargo.toml | cut -d '"' -f 2)}"
+VERSION="${1:-2.0.0}"
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 UNIVERSAL="${UNIVERSAL:-0}"
 APP_NAME="Iridecence PDF Reader.app"

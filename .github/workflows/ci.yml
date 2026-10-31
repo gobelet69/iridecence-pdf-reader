@@ -18,32 +18,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-          targets: aarch64-apple-darwin
+      - name: Select Xcode version
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app
+          fi
+          xcodebuild -version
 
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Verify code formatting
-        run: cargo fmt --check
-
-      - name: Run clippy linter
-        run: cargo clippy --color always
+      - name: Build Swift Package
+        run: swift build --scratch-path /tmp/swift-build
 
       - name: Run automated test suite
-        run: cargo test
+        run: swift test --scratch-path /tmp/swift-build
 
       - name: Verify application bundle build
         run: ./build_app.sh
@@ -54,8 +44,7 @@ jobs:
           APP_PATH="Iridecence PDF Reader.app"
           test -d "$APP_PATH"
           test -f "$APP_PATH/Contents/Info.plist"
-          test -x "$APP_PATH/Contents/MacOS/oxireader"
+          test -x "$APP_PATH/Contents/MacOS/Iridescence"
           test -f "$APP_PATH/Contents/Resources/AppIcon.icns"
           plutil -lint "$APP_PATH/Contents/Info.plist"
           codesign --verify --deep --strict "$APP_PATH"
-          echo "✓ Application bundle verified successfully."
