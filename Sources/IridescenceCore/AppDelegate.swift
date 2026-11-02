@@ -719,8 +719,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         explorerSplitItem.isCollapsed = false
 
         // Automatically open the first PDF in the workspace if no document is loaded or if switching workspaces
-        let allPDFs = WorkspaceNode.collectAllPDFPaths(in: url.path, onlyLocallyAvailable: true)
-        if let firstPDF = allPDFs.first {
+        let firstPDF = WorkspaceNode.collectAllPDFPaths(in: url.path, onlyLocallyAvailable: true, maxItems: 1).first
+        if let firstPDF {
             openFile(at: URL(fileURLWithPath: firstPDF), fromWorkspaceSidebar: true)
         } else {
             window.title = url.lastPathComponent

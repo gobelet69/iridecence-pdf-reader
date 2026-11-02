@@ -1,4 +1,8 @@
-# Rust build artifacts
+# Swift PM build artifacts
+.build/
+dist/
+
+# Rust build artifacts (legacy)
 target*
 target.nosync/
 *.nosync/

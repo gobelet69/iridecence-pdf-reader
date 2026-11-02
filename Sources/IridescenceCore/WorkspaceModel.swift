@@ -547,20 +547,21 @@ public final class WorkspaceNode: NSObject {
     public static func collectAllPDFPaths(
         in rootPath: String,
         showHiddenFiles: Bool = SettingsManager.shared.showHiddenFiles,
-        onlyLocallyAvailable: Bool = false
+        onlyLocallyAvailable: Bool = false,
+        maxItems: Int = maxTotalItems
     ) -> [String] {
         var results: [String] = []
         var visitedDirs: Set<String> = []
 
         func walk(_ currentDir: String, depth: Int) {
-            guard depth <= maxRecursionDepth, results.count < maxTotalItems else { return }
+            guard depth <= maxRecursionDepth, results.count < maxItems else { return }
             let canon = UIConstants.canonicalPath(currentDir)
             guard !canon.isEmpty, !visitedDirs.contains(canon) else { return }
             visitedDirs.insert(canon)
 
             let children = scanImmediateChildren(at: currentDir, showHiddenFiles: showHiddenFiles)
             for child in children {
-                if results.count >= maxTotalItems { break }
+                if results.count >= maxItems { break }
                 if child.isDirectory {
                     walk(child.path, depth: depth + 1)
                 } else {
