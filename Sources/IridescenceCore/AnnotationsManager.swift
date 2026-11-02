@@ -43,9 +43,10 @@ public enum AnnotationSaveError: LocalizedError, Equatable {
 public enum AnnotationsManager {
     /// Enforces Rule 2.1: Never touch, modify, write to, or delete files in `/Users/theodeville/Documents/MASTER`.
     public static func isMasterProtectedPath(_ filePath: String) -> Bool {
-        let rawCheck = filePath.contains("/Documents/MASTER/") || filePath.hasSuffix("/Documents/MASTER")
-        let canonical = UIConstants.canonicalPath(filePath)
-        let canonCheck = canonical.contains("/Documents/MASTER/") || canonical.hasSuffix("/Documents/MASTER")
+        let rawLower = filePath.lowercased()
+        let canonical = UIConstants.canonicalPath(filePath).lowercased()
+        let rawCheck = rawLower.contains("/documents/master/") || rawLower.hasSuffix("/documents/master")
+        let canonCheck = canonical.contains("/documents/master/") || canonical.hasSuffix("/documents/master")
         return rawCheck || canonCheck
     }
 

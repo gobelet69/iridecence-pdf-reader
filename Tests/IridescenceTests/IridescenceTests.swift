@@ -215,12 +215,17 @@ final class IridescenceTests: XCTestCase {
     // MARK: - 8. Annotations, Multi-Line QuadPoints & MASTER Read-Only Protection Tests
 
     func testMasterDirectoryProtectionAndSafeSaveAndAnnotations() throws {
-        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("/Users/theodeville/Documents/MASTER/test.pdf"))
-        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("/Users/theodeville/Documents/MASTER"))
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("\(home)/Documents/MASTER/test.pdf"))
+        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("\(home)/Documents/MASTER"))
+        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("\(home)/documents/master/test.pdf"))
+        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("\(home)/Documents/Master/nested/test.pdf"))
+        XCTAssertTrue(AnnotationsManager.isMasterProtectedPath("\(home)/Documents/Sub/../MASTER/test.pdf"))
         XCTAssertFalse(AnnotationsManager.isMasterProtectedPath("/tmp/iridescence-unit-test.pdf"))
+        XCTAssertFalse(AnnotationsManager.isMasterProtectedPath("\(home)/Documents/Masterpiece/safe.pdf"))
 
         let dummyDoc = PDFDocument()
-        XCTAssertThrowsError(try AnnotationsManager.saveDocumentSafely(dummyDoc, to: "/Users/theodeville/Documents/MASTER/forbidden.pdf")) { error in
+        XCTAssertThrowsError(try AnnotationsManager.saveDocumentSafely(dummyDoc, to: "\(home)/Documents/MASTER/forbidden.pdf")) { error in
             XCTAssertEqual(error as? AnnotationSaveError, .masterDirectoryProtected)
         }
 
