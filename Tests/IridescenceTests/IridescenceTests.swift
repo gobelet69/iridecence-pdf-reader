@@ -8,6 +8,56 @@ import XCTest
 @MainActor
 final class IridescenceTests: XCTestCase {
 
+    func testWorkspaceRowsUseAvailableWidthAfterResizingAndIndentation() throws {
+        _ = NSApplication.shared
+        let folder = URL(fileURLWithPath: "/tmp/reader-sidebar-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let nested = folder.appendingPathComponent("M0/Q1/302/Exams/Quelques sujets corrigés")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let pdf = nested.appendingPathComponent("examen-2026-mathematiques-discretes-version-corrigee.pdf")
+        VisualQAHarness.ensureRichTestPDF(at: pdf.path, forceSynthetic: true)
+        let controller = WorkspaceOutlineController()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 230, height: 600),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = controller.containerView
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        controller.loadWorkspace(rootURL: folder)
+        controller.outlineView.expandItem(nil, expandChildren: true)
+        var previousWidth: CGFloat?
+        var previousLabelWidth: CGFloat?
+        for width: CGFloat in [230, 360, 230, 360] {
+            window.setContentSize(NSSize(width: width, height: 600))
+            controller.containerView.layoutSubtreeIfNeeded()
+            VisualQAHarness.pumpRunLoop(0.05)
+            let outline = controller.outlineView
+            XCTAssertEqual(outline.bounds.width, controller.scrollView.contentSize.width, accuracy: 2)
+            let row = outline.numberOfRows - 1
+            let cell = try XCTUnwrap(outline.view(atColumn: 0, row: row, makeIfNecessary: true))
+            cell.layoutSubtreeIfNeeded()
+            let label = try XCTUnwrap(cell.subviews.compactMap { $0 as? NSTextField }.first)
+            let labelRect = outline.convert(label.bounds, from: label)
+            XCTAssertGreaterThan(labelRect.width, 20)
+            XCTAssertEqual(labelRect.maxX, outline.bounds.maxX - 8, accuracy: 16,
+                           "An indented filename must extend to the sidebar's trailing edge")
+            XCTAssertEqual(label.toolTip, pdf.lastPathComponent)
+            if let previousWidth, let previousLabelWidth {
+                XCTAssertEqual(labelRect.width - previousLabelWidth, width - previousWidth, accuracy: 1)
+            }
+            previousWidth = width
+            previousLabelWidth = labelRect.width
+        }
+        if let directory = ProcessInfo.processInfo.environment["IRIDESCENCE_SIDEBAR_QA_DIR"] {
+            for dark in [false, true] {
+                window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                VisualQAHarness.pumpRunLoop(0.1)
+                let theme = dark ? "dark" : "light"
+                XCTAssertTrue(VisualQAHarness.captureWindowToPNG(window, outPath: "\(directory)/sidebar-\(theme).png"))
+            }
+        }
+    }
+
     func testWindowGeometryFitsDisplaysSmallerThanPreferredMinimum() {
         for visible in [NSRect(x: -640, y: 30, width: 640, height: 450),
                         NSRect(x: 1440, y: -300, width: 720, height: 500)] {

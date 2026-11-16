@@ -76,6 +76,14 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
         scrollView.drawsBackground = false
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.contentView.postsBoundsChangedNotifications = true
+        scrollView.contentView.postsFrameChangedNotifications = true
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(workspaceViewportDidResize(_:)),
+            name: NSView.frameDidChangeNotification,
+            object: scrollView.contentView
+        )
 
         NotificationCenter.default.addObserver(
             self,
@@ -434,7 +442,7 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
         cell.addSubview(iconView)
         cell.addSubview(label)
 
-        var trailingConstraint = label.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -8.0)
+        var trailingConstraint = label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8.0)
 
         if node.iCloudStatus.isInFlight {
             let spinner = NSProgressIndicator()
@@ -446,7 +454,7 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
             spinner.translatesAutoresizingMaskIntoConstraints = false
             cell.addSubview(spinner)
 
-            trailingConstraint = label.trailingAnchor.constraint(lessThanOrEqualTo: spinner.leadingAnchor, constant: -6.0)
+            trailingConstraint = label.trailingAnchor.constraint(equalTo: spinner.leadingAnchor, constant: -6.0)
             NSLayoutConstraint.activate([
                 spinner.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8.0),
                 spinner.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
@@ -475,7 +483,7 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
             }
             statusIcon.toolTip = tip
             cell.addSubview(statusIcon)
-            trailingConstraint = label.trailingAnchor.constraint(lessThanOrEqualTo: statusIcon.leadingAnchor, constant: -6.0)
+            trailingConstraint = label.trailingAnchor.constraint(equalTo: statusIcon.leadingAnchor, constant: -6.0)
             NSLayoutConstraint.activate([
                 statusIcon.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8.0),
                 statusIcon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
@@ -606,6 +614,12 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
 
     @objc private func scrollBoundsChanged(_ notification: Notification) {
         hoverCoordinator.clear(in: outlineView)
+    }
+
+    @objc private func workspaceViewportDidResize(_ notification: Notification) {
+        // NSScrollView stretches its document view, but NSOutlineView may keep
+        // the old column width. Refit the column, not the window or indentation.
+        outlineView.sizeLastColumnToFit()
     }
 
     @objc public func mouseMoved(with event: NSEvent) {

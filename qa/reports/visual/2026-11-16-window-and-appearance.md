@@ -24,3 +24,7 @@ Implemented the requested stable window behavior and native, restrained appearan
 ## Verification limits
 
 CLI window capture was unavailable and the harness used cached-view renders; these do not establish native material compositing. Native app screenshots and real clicks were also inspected separately. Tests log a transient AppKit constraint warning while replacing the Home root controller; final frame and control-bounds assertions pass. Xcode reports an unrelated CoreSimulator version mismatch, but the macOS Release build succeeds. This is a local development update, not a published release.
+
+## Follow-up: workspace filename truncation
+
+The outline document view expanded, but its table column retained its initial width. Refit the single column when the clip view changes frame, and anchor filename labels to the trailing edge while reserving status-icon space. A nested-folder regression failed before the fix and now verifies widening/narrowing through 230/360 points, exact matching growth of filename space, and full-name tooltips. All 25 working-tree tests and `scripts/verify.sh` pass. Light/dark captures under `/tmp/pdf-reader-sidebar-qa` show filenames filling the available row width. The signed local application was updated without closing the active session.
