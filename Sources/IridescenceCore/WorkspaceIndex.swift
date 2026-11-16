@@ -45,6 +45,11 @@ public final class WorkspaceIndex: @unchecked Sendable {
     public init() {}
 
     public static func defaultCacheURL() -> URL {
+        if let directory = ProcessInfo.processInfo.environment["IRIDESCENCE_QA_CACHE_DIR"], directory.hasPrefix("/tmp/") {
+            let folder = URL(fileURLWithPath: directory, isDirectory: true)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            return folder.appendingPathComponent("workspace_index.bin")
+        }
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let appDir = caches.appendingPathComponent("com.iridecence.pdfreader", isDirectory: true)

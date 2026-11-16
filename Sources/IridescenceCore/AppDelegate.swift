@@ -182,6 +182,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         window.hasShadow = true
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.setFrameAutosaveName("MainWindowGeometry")
 
         let toolbar = NSToolbar(identifier: "IridescenceMainToolbar")
         toolbar.delegate = self
@@ -195,6 +196,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         leftVC.view = workspaceController.containerView
         explorerSplitItem = NSSplitViewItem(sidebarWithViewController: leftVC)
         explorerSplitItem.canCollapse = true
+        explorerSplitItem.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
         explorerSplitItem.minimumThickness = UIConstants.sidebarWidthMin
         explorerSplitItem.maximumThickness = UIConstants.sidebarWidthMax
         explorerSplitItem.holdingPriority = NSLayoutConstraint.Priority(251)
@@ -270,7 +272,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
             rightSegmentedControl.setToolTip(def.tooltip, forSegment: i)
         }
 
-        rightSidebarModeLabel = NSTextField(labelWithString: "PAGES")
+        rightSidebarModeLabel = NSTextField(labelWithString: "Pages")
         rightSidebarModeLabel.font = .systemFont(ofSize: 10.0, weight: .semibold)
         rightSidebarModeLabel.textColor = .secondaryLabelColor
         rightSidebarModeLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -342,11 +344,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         rightEffect.state = .followsWindowActiveState
         rightEffect.autoresizingMask = [.width, .height]
 
-        let inspectorWash = IridescentSurfaceWashView(role: .inspector)
-        inspectorWash.frame = rightEffect.bounds
-        inspectorWash.autoresizingMask = [.width, .height]
-        rightEffect.addSubview(inspectorWash)
-
         rightEffect.addSubview(rightContainer)
 
         NSLayoutConstraint.activate([
@@ -360,6 +357,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         rightVC.view = rightEffect
         inspectorSplitItem = NSSplitViewItem(inspectorWithViewController: rightVC)
         inspectorSplitItem.canCollapse = true
+        inspectorSplitItem.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
         inspectorSplitItem.minimumThickness = UIConstants.sidebarWidthMin
         inspectorSplitItem.maximumThickness = UIConstants.sidebarWidthMax
         inspectorSplitItem.holdingPriority = NSLayoutConstraint.Priority(250)
@@ -379,6 +377,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
 
         // Default to Home screen on cold launch unless a document is opened
         showHomeScreen(nil)
+        WindowGeometry.sanitizeWindow(window, kind: .home)
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -716,7 +715,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         }
 
         transitionToReaderLayout(mode: .workspace)
-        explorerSplitItem.isCollapsed = false
+        setSidebar(explorerSplitItem, collapsed: false)
 
         // Automatically open the first PDF in the workspace if no document is loaded or if switching workspaces
         let firstPDF = WorkspaceNode.collectAllPDFPaths(in: url.path, onlyLocallyAvailable: true, maxItems: 1).first
@@ -729,42 +728,37 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
     }
 
     private func transitionToReaderLayout(mode: AppContentMode) {
-        let wasHome = (contentMode == .home)
+        let frame = window.frame
         contentMode = mode
 
         if window.contentViewController !== splitViewController {
+            explorerSplitItem.isCollapsed = mode != .workspace
+            splitViewController.view.frame = window.contentView?.bounds ?? .zero
             window.contentViewController = splitViewController
+        } else {
+            setSidebar(explorerSplitItem, collapsed: mode != .workspace)
         }
 
-        if mode == .standaloneDocument {
-            explorerSplitItem.isCollapsed = true
-        } else if mode == .workspace {
-            explorerSplitItem.isCollapsed = false
-        }
-
-        if wasHome {
-            window.setFrameAutosaveName("ReaderWindowGeometry")
-            if window.frame.width < 1000 || window.frame.height < 680 {
-                let readerFrame = WindowGeometry.initialFrame(for: .reader)
-                window.setFrame(readerFrame, display: true)
-            }
-            WindowGeometry.sanitizeWindow(window, kind: .reader)
-        }
         window.toolbar?.isVisible = true
+        // Replacing a root controller and showing its toolbar can change the
+        // window's fitting size. Retain the frame the person chose.
+        window.setFrame(frame, display: true)
+        updateSidebarWidthLimits()
     }
 
     @objc public func showHomeScreen(_ sender: Any?) {
         if let active = tabManager.activeTab {
             saveCurrentTabViewportState(into: active)
         }
+        let frame = window.frame
         contentMode = .home
         homeScreenController.refreshContent()
+        homeScreenController.viewController.view.frame = window.contentView?.bounds ?? .zero
         window.contentViewController = homeScreenController.viewController
         window.title = "Iridescence PDF Reader"
         window.subtitle = ""
-        window.setFrameAutosaveName("HomeWindowGeometry")
-        WindowGeometry.sanitizeWindow(window, kind: .home)
         window.toolbar?.isVisible = false
+        window.setFrame(frame, display: true)
     }
 
     // MARK: - Multi-Document Tab Operations
@@ -780,7 +774,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
                 if workspaceController.rootNode?.path != wsRoot {
                     workspaceController.loadWorkspace(rootURL: URL(fileURLWithPath: wsRoot))
                 }
-                explorerSplitItem.isCollapsed = false
+                setSidebar(explorerSplitItem, collapsed: false)
                 contentMode = .workspace
                 if SettingsManager.shared.autoRevealSidebar {
                     workspaceController.revealFile(atPath: nextTab.path)
@@ -914,11 +908,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
     private func updateRightSidebarVisibility(forSegment index: Int) {
         let modeTitle: String = {
             switch index {
-            case 1: return "OUTLINE"
-            case 2: return "SEARCH"
-            case 3: return "BOOKMARKS"
-            case 4: return "ANNOTATIONS"
-            default: return "PAGES"
+            case 1: return "Outline"
+            case 2: return "Search"
+            case 3: return "Bookmarks"
+            case 4: return "Annotations"
+            default: return "Pages"
             }
         }()
         rightSidebarModeLabel.stringValue = modeTitle
@@ -1103,16 +1097,64 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         homeScreenController.refreshContent()
     }
 
-    // MARK: - Responsive Window Resize Handling (BUG-06 Fix)
+    // MARK: - Window and viewport layout
+
+    /// Both panels must fit beside the reader before AppKit expands either one.
+    /// Otherwise even the fixed-split-view collapse behavior may grow the window.
+    private func updateSidebarWidthLimits() {
+        guard let splitViewController else { return }
+        let width = splitViewController.splitView.bounds.width
+        guard width > 0 else { return }
+        let limit = max(UIConstants.sidebarWidthMin,
+                        min(UIConstants.sidebarWidthMax, (width - UIConstants.readerCenterMinWidth - 2) / 2))
+        explorerSplitItem.maximumThickness = limit
+        inspectorSplitItem.maximumThickness = limit
+    }
+
+    private func setSidebar(_ item: NSSplitViewItem, collapsed: Bool) {
+        updateSidebarWidthLimits()
+        guard item.isCollapsed != collapsed else { return }
+        if !collapsed {
+            let width = splitViewController.splitView.bounds.width
+            if width < UIConstants.readerCenterMinWidth + UIConstants.sidebarWidthMin * 2 + 2 {
+                // On a very small display, keep the requested panel and the
+                // document usable by closing the opposite panel first.
+                let other = item === explorerSplitItem ? inspectorSplitItem : explorerSplitItem
+                other?.isCollapsed = true
+            }
+        }
+        // No window animation: the content gives up space, never the desktop.
+        item.isCollapsed = collapsed
+        splitViewController.splitView.layoutSubtreeIfNeeded()
+        if !collapsed {
+            pdfView.autoScales = true
+            pdfView.layoutDocumentView()
+            pdfView.scaleFactor = pdfView.scaleFactorForSizeToFit
+        }
+    }
 
     public func windowDidResize(_ notification: Notification) {
         guard contentMode != .home else { return }
-        let width = window.frame.width
-        if width < UIConstants.responsiveCollapseInspectorWidth && !inspectorSplitItem.isCollapsed {
-            inspectorSplitItem.isCollapsed = true
+        updateSidebarWidthLimits()
+        let width = splitViewController.splitView.bounds.width
+        if width < UIConstants.readerCenterMinWidth + UIConstants.sidebarWidthMin * 2 + 2,
+           !explorerSplitItem.isCollapsed && !inspectorSplitItem.isCollapsed {
+            setSidebar(inspectorSplitItem, collapsed: true)
         }
-        if width < UIConstants.responsiveCollapseSidebarWidth && !explorerSplitItem.isCollapsed {
-            explorerSplitItem.isCollapsed = true
+    }
+
+    public func applicationDidChangeScreenParameters(_ notification: Notification) {
+        guard let window else { return }
+        WindowGeometry.sanitizeWindow(window, kind: contentMode == .home ? .home : .reader)
+    }
+
+    public func windowDidChangeScreen(_ notification: Notification) {
+        // Moving between displays is an explicit user action. Only constrain the
+        // frame when the destination display cannot contain its current size.
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        let visible = WindowGeometry.activeVisibleFrame(for: window)
+        if window.frame.width > visible.width || window.frame.height > visible.height {
+            WindowGeometry.sanitizeWindow(window, kind: contentMode == .home ? .home : .reader)
         }
     }
 
@@ -1137,7 +1179,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
             }
 
         case .searchInPDF(let query):
-            inspectorSplitItem.isCollapsed = false
+            setSidebar(inspectorSplitItem, collapsed: false)
             switchSidebarToIndex(2)
             pdfSearchController.performSearch(query)
 
@@ -1343,7 +1385,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
 
     @objc public func findInDocument(_ sender: Any?) {
         guard contentMode != .home else { return }
-        inspectorSplitItem.isCollapsed = false
+        setSidebar(inspectorSplitItem, collapsed: false)
         switchSidebarToIndex(2)
         window.makeFirstResponder(pdfSearchController.searchField)
     }
@@ -1379,12 +1421,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
 
     @objc public func toggleLeftSidebar(_ sender: Any?) {
         guard contentMode != .home else { return }
-        explorerSplitItem.animator().isCollapsed.toggle()
+        setSidebar(explorerSplitItem, collapsed: !explorerSplitItem.isCollapsed)
     }
 
     @objc public func toggleRightSidebar(_ sender: Any?) {
         guard contentMode != .home else { return }
-        inspectorSplitItem.animator().isCollapsed.toggle()
+        setSidebar(inspectorSplitItem, collapsed: !inspectorSplitItem.isCollapsed)
     }
 
     @objc public func toggleFocusMode(_ sender: Any?) {
@@ -1392,12 +1434,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         if !isFocusModeActive {
             savedLeftCollapsedBeforeFocus = explorerSplitItem.isCollapsed
             savedRightCollapsedBeforeFocus = inspectorSplitItem.isCollapsed
-            explorerSplitItem.isCollapsed = true
-            inspectorSplitItem.isCollapsed = true
+            setSidebar(explorerSplitItem, collapsed: true)
+            setSidebar(inspectorSplitItem, collapsed: true)
             isFocusModeActive = true
         } else {
-            explorerSplitItem.isCollapsed = (contentMode == .standaloneDocument) ? true : savedLeftCollapsedBeforeFocus
-            inspectorSplitItem.isCollapsed = savedRightCollapsedBeforeFocus
+            setSidebar(explorerSplitItem, collapsed: contentMode == .standaloneDocument || savedLeftCollapsedBeforeFocus)
+            setSidebar(inspectorSplitItem, collapsed: savedRightCollapsedBeforeFocus)
             isFocusModeActive = false
         }
     }
@@ -1407,15 +1449,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSToolbarDelega
         if !isPresentationModeActive {
             savedLeftCollapsedBeforeFocus = explorerSplitItem.isCollapsed
             savedRightCollapsedBeforeFocus = inspectorSplitItem.isCollapsed
-            explorerSplitItem.isCollapsed = true
-            inspectorSplitItem.isCollapsed = true
+            setSidebar(explorerSplitItem, collapsed: true)
+            setSidebar(inspectorSplitItem, collapsed: true)
             window.toolbar?.isVisible = false
             tabBarView.isHidden = true
             tabBarHeightConstraint.constant = 0.0
             isPresentationModeActive = true
         } else {
-            explorerSplitItem.isCollapsed = (contentMode == .standaloneDocument) ? true : savedLeftCollapsedBeforeFocus
-            inspectorSplitItem.isCollapsed = savedRightCollapsedBeforeFocus
+            setSidebar(explorerSplitItem, collapsed: contentMode == .standaloneDocument || savedLeftCollapsedBeforeFocus)
+            setSidebar(inspectorSplitItem, collapsed: savedRightCollapsedBeforeFocus)
             window.toolbar?.isVisible = true
             updateTabBarVisibility()
             isPresentationModeActive = false

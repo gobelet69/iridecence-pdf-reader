@@ -1,38 +1,13 @@
 import AppKit
 import Foundation
 
-/// Circular iridescent halo badge behind empty-state SF Symbol icons.
-@MainActor
-private final class IridescentIconMedallionView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let b = bounds.insetBy(dx: 1.0, dy: 1.0)
-        guard b.width > 8.0, b.height > 8.0 else { return }
-        let path = NSBezierPath(ovalIn: b)
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-
-        let c1 = IridescenceDesign.primaryViolet.withAlphaComponent(isDark ? 0.22 : 0.13)
-        let c2 = IridescenceDesign.accentCyan.withAlphaComponent(isDark ? 0.16 : 0.09)
-        if let grad = NSGradient(starting: c1, ending: c2) {
-            grad.draw(in: path, angle: 45.0)
-        } else {
-            c1.setFill()
-            path.fill()
-        }
-
-        IridescenceDesign.primaryViolet.withAlphaComponent(isDark ? 0.38 : 0.24).setStroke()
-        path.lineWidth = 1.0
-        path.stroke()
-    }
-}
-
-/// Reusable centered empty state view with an iridescent medallion backplate,
-/// SF Symbol icon, primary title, and multi-line guidance subtitle.
+/// Centered empty state with a plain system symbol and useful guidance.
 @MainActor
 public final class EmptyStateView: NSView {
     public let iconView: NSImageView
     public let titleLabel: NSTextField
     public let subtitleLabel: NSTextField
-    private let medallionView = IridescentIconMedallionView()
+    private let medallionView = NSView()
 
     public init(symbolName: String, title: String, subtitle: String) {
         self.iconView = NSImageView()
@@ -53,12 +28,12 @@ public final class EmptyStateView: NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 6.0
+        stack.spacing = 8.0
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         medallionView.translatesAutoresizingMaskIntoConstraints = false
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.contentTintColor = IridescenceDesign.primaryViolet
+        iconView.contentTintColor = NSColor.secondaryLabelColor
         configureSymbol(symbolName)
         medallionView.addSubview(iconView)
 

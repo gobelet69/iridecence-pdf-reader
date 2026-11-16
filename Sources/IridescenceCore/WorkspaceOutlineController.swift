@@ -8,7 +8,7 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
     public let scrollView: NSScrollView
     public let containerView: NSVisualEffectView
     public let headerLabel: NSTextField
-    public let countBadge: IridescentPillBadge
+    public let countBadge: MetadataBadge
     public let emptyStateView: EmptyStateView
 
     public private(set) var rootNode: WorkspaceNode?
@@ -26,7 +26,7 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
         self.scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 230, height: 680))
         self.containerView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 230, height: 740))
         self.headerLabel = NSTextField(labelWithString: "WORKSPACE")
-        self.countBadge = IridescentPillBadge(text: "", style: .violet)
+        self.countBadge = MetadataBadge(text: "", style: .neutral)
         self.emptyStateView = EmptyStateView(
             symbolName: "folder.badge.questionmark",
             title: "No PDFs in Workspace",
@@ -41,7 +41,6 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
     }
 
     private func setupViews() {
-        let wash = IridescentSurfaceWashView(role: .sidebar)
 
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("WorkspaceColumn"))
         col.width = 210.0
@@ -90,11 +89,11 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
         if let fImg = NSImage(systemSymbolName: "folder.fill.badge.gearshape", accessibilityDescription: nil) {
             fImg.isTemplate = true
             headerIcon.image = fImg
-            headerIcon.contentTintColor = IridescenceDesign.primaryViolet
+            headerIcon.contentTintColor = NSColor.secondaryLabelColor
         }
 
         headerLabel.font = .systemFont(ofSize: 11.0, weight: .bold)
-        headerLabel.textColor = IridescenceDesign.primaryViolet
+        headerLabel.textColor = NSColor.secondaryLabelColor
         headerLabel.lineBreakMode = .byTruncatingTail
         headerLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         headerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -107,7 +106,6 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
         containerView.state = .followsWindowActiveState
         containerView.autoresizingMask = [.width, .height]
 
-        containerView.addSubview(wash)
         containerView.addSubview(headerIcon)
         containerView.addSubview(headerLabel)
         containerView.addSubview(countBadge)
@@ -115,10 +113,6 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
         containerView.addSubview(emptyStateView)
 
         NSLayoutConstraint.activate([
-            wash.topAnchor.constraint(equalTo: containerView.topAnchor),
-            wash.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-            wash.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-            wash.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
 
             headerIcon.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 54.0),
             headerIcon.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 14.0),
@@ -416,13 +410,13 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
             img.isTemplate = true
             iconView.image = img
             if node.isDirectory {
-                iconView.contentTintColor = IridescenceDesign.primaryViolet
+                iconView.contentTintColor = NSColor.secondaryLabelColor
             } else if node.iCloudStatus == .cloudOnly {
-                iconView.contentTintColor = IridescenceDesign.accentCyan
+                iconView.contentTintColor = NSColor.secondaryLabelColor
             } else if node.iCloudStatus == .failed || node.iCloudStatus == .unavailable {
                 iconView.contentTintColor = .systemRed
             } else {
-                iconView.contentTintColor = IridescenceDesign.secondaryIndigo.withAlphaComponent(0.85)
+                iconView.contentTintColor = NSColor.secondaryLabelColor.withAlphaComponent(0.85)
             }
         }
 
@@ -465,7 +459,7 @@ public final class WorkspaceOutlineController: NSObject, NSOutlineViewDataSource
             let (cloudSymbol, tint, tip): (String, NSColor, String) = {
                 switch node.iCloudStatus {
                 case .cloudOnly:
-                    return ("icloud.and.arrow.down", IridescenceDesign.accentCyan, "Stored in iCloud Drive — Click to download and open")
+                    return ("icloud.and.arrow.down", NSColor.secondaryLabelColor, "Stored in iCloud Drive — Click to download and open")
                 case .failed:
                     return ("exclamationmark.icloud.fill", .systemRed, "iCloud download failed — Click to retry")
                 case .unavailable:

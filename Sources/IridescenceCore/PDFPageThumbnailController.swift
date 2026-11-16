@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import PDFKit
 
-/// Custom thumbnail card cell that draws an unambiguous iridescent frame and pill badge
+/// Custom thumbnail card cell that draws an system-accent frame and page marker
 /// ONLY for the currently active page, while keeping unselected page numbers clean and unhighlighted.
 @MainActor
 private final class ThumbnailPageCardView: NSView {
@@ -52,7 +52,7 @@ private final class ThumbnailPageCardView: NSView {
     private func updateLabelStyle() {
         if isCurrentPage {
             pageLabel.font = .monospacedDigitSystemFont(ofSize: 11.0, weight: .bold)
-            pageLabel.textColor = .white
+            pageLabel.textColor = .alternateSelectedControlTextColor
         } else {
             pageLabel.font = .monospacedDigitSystemFont(ofSize: 11.0, weight: .medium)
             pageLabel.textColor = .secondaryLabelColor
@@ -69,11 +69,11 @@ private final class ThumbnailPageCardView: NSView {
 
         if isCurrentPage {
             let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            IridescenceDesign.primaryViolet.withAlphaComponent(isDark ? 0.22 : 0.12).setFill()
+            NSColor.controlAccentColor.withAlphaComponent(isDark ? 0.22 : 0.12).setFill()
             framePath.fill()
 
-            IridescenceDesign.primaryViolet.setStroke()
-            framePath.lineWidth = 2.2
+            NSColor.controlAccentColor.setStroke()
+            framePath.lineWidth = 2
             framePath.stroke()
 
             // Active page number pill — ONLY drawn when `isCurrentPage == true`
@@ -86,16 +86,12 @@ private final class ThumbnailPageCardView: NSView {
                 height: labelFrame.height + 4.0
             )
             let pillPath = NSBezierPath(roundedRect: pillRect, xRadius: pillRect.height * 0.5, yRadius: pillRect.height * 0.5)
-            if let grad = NSGradient(starting: IridescenceDesign.primaryViolet, ending: IridescenceDesign.secondaryIndigo) {
-                grad.draw(in: pillPath, angle: 0.0)
-            } else {
-                IridescenceDesign.primaryViolet.setFill()
-                pillPath.fill()
-            }
+            NSColor.controlAccentColor.setFill()
+            pillPath.fill()
         } else if isHovered {
-            IridescenceDesign.primaryViolet.withAlphaComponent(0.06).setFill()
+            NSColor.secondaryLabelColor.withAlphaComponent(0.06).setFill()
             framePath.fill()
-            IridescenceDesign.primaryViolet.withAlphaComponent(0.35).setStroke()
+            NSColor.secondaryLabelColor.withAlphaComponent(0.35).setStroke()
             framePath.lineWidth = 1.0
             framePath.stroke()
         } else {
@@ -123,7 +119,7 @@ private final class ThumbnailTableRowView: NSTableRowView {
 }
 
 /// Replaces `PDFThumbnailView` in the right inspector with a lazy-cached, unambiguous page thumbnail list
-/// where only the active page displays an iridescent selection ring and highlighted page number pill.
+/// where only the active page displays a system-accent selection ring and highlighted page number pill.
 @MainActor
 public final class PDFPageThumbnailController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     public let scrollView: NSScrollView

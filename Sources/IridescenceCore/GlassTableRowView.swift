@@ -15,11 +15,6 @@ public final class GlassTableRowView: NSTableRowView {
         }
     }
 
-    public override var isEmphasized: Bool {
-        get { true }
-        set { super.isEmphasized = newValue }
-    }
-
     public override var interiorBackgroundStyle: NSView.BackgroundStyle {
         .normal
     }
@@ -52,7 +47,7 @@ public final class GlassTableRowView: NSTableRowView {
         guard b.width > 12.0, b.height > 4.0 else { return }
 
         let inset = capsuleRect()
-        IridescenceDesign.drawIridescentSelectionCapsule(in: inset, radius: UIConstants.radiusRow)
+        ReaderAppearance.drawSelection(in: inset, radius: UIConstants.radiusRow, emphasized: isEmphasized && window?.isKeyWindow == true)
     }
 
     public override func drawBackground(in dirtyRect: NSRect) {
@@ -61,7 +56,7 @@ public final class GlassTableRowView: NSTableRowView {
         guard b.width > 12.0, b.height > 4.0 else { return }
 
         let inset = capsuleRect()
-        IridescenceDesign.drawIridescentHoverCapsule(in: inset, radius: UIConstants.radiusRow)
+        ReaderAppearance.drawHover(in: inset, radius: UIConstants.radiusRow)
     }
 }
 

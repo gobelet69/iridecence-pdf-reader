@@ -28,7 +28,7 @@ public enum WindowKind: Sendable {
         case .home:
             return NSSize(width: 740.0, height: 480.0)
         case .reader:
-            return NSSize(width: 780.0, height: 520.0)
+            return NSSize(width: 740.0, height: 480.0)
         case .palette:
             return NSSize(width: 620.0, height: 48.0)
         case .debugConsole:
@@ -47,11 +47,12 @@ public enum WindowGeometry {
         for kind: WindowKind,
         in visible: NSRect
     ) -> NSRect {
-        let minSize = kind.minSize
+        let minSize = NSSize(width: min(kind.minSize.width, max(1, visible.width - 24)),
+                             height: min(kind.minSize.height, max(1, visible.height - 24)))
         let defSize = kind.defaultSize
 
-        let maxW = max(minSize.width, visible.width - 24.0)
-        let maxH = max(minSize.height, visible.height - 24.0)
+        let maxW = max(1, visible.width - 24.0)
+        let maxH = max(1, visible.height - 24.0)
 
         var w = current.width
         var h = current.height
@@ -84,7 +85,7 @@ public enum WindowGeometry {
     public static func activeVisibleFrame(for window: NSWindow? = nil) -> NSRect {
         if let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens.first {
             let vf = screen.visibleFrame
-            if vf.width >= 600.0 && vf.height >= 400.0 {
+            if vf.width > 0 && vf.height > 0 {
                 return vf
             }
         }
@@ -97,8 +98,8 @@ public enum WindowGeometry {
         let defSize = kind.defaultSize
         let minSize = kind.minSize
 
-        let maxW = max(minSize.width, visible.width - 40.0)
-        let maxH = max(minSize.height, visible.height - 40.0)
+        let maxW = max(1, visible.width - 40.0)
+        let maxH = max(1, visible.height - 40.0)
 
         let w = min(max(defSize.width, minSize.width), maxW)
         let h = min(max(defSize.height, minSize.height), maxH)
@@ -114,8 +115,8 @@ public enum WindowGeometry {
     public static func sanitizeWindow(_ window: NSWindow, kind: WindowKind) {
         let visible = activeVisibleFrame(for: window)
         let minSize = kind.minSize
-        let maxW = max(minSize.width, visible.width - 24.0)
-        let maxH = max(minSize.height, visible.height - 24.0)
+        let maxW = max(1, visible.width - 24.0)
+        let maxH = max(1, visible.height - 24.0)
 
         window.minSize = NSSize(width: min(minSize.width, maxW), height: min(minSize.height, maxH))
         let sanitized = sanitizeRect(window.frame, for: kind, in: visible)

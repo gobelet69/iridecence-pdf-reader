@@ -65,7 +65,7 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
     public let panel: FloatingPalettePanel
     public let effectView: NSVisualEffectView
     public let searchField: NSTextField
-    public let modePillBadge = IridescentPillBadge(text: "RECENT", style: .violet)
+    public let modePillBadge = MetadataBadge(text: "RECENT", style: .neutral)
     public let separator: NSView
     public let scrollView: NSScrollView
     public let tableView: NSTableView
@@ -109,14 +109,13 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
         effectView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
         effectView.autoresizingMask = [.width, .height]
 
-        let paletteWash = IridescentSurfaceWashView(role: .palette)
 
         let magIcon = NSImageView()
         magIcon.translatesAutoresizingMaskIntoConstraints = false
-        if let img = NSImage(systemSymbolName: "sparkle.magnifyingglass", accessibilityDescription: "Search") {
+        if let img = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search") {
             let cfg = NSImage.SymbolConfiguration(pointSize: 16.0, weight: .semibold)
             magIcon.image = img.withSymbolConfiguration(cfg) ?? img
-            magIcon.contentTintColor = IridescenceDesign.primaryViolet
+            magIcon.contentTintColor = NSColor.secondaryLabelColor
         }
 
         searchField.isBordered = false
@@ -189,7 +188,6 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
         footerBar.addSubview(footerTopBorder)
         footerBar.addSubview(footerLabel)
 
-        effectView.addSubview(paletteWash)
         effectView.addSubview(magIcon)
         effectView.addSubview(searchField)
         effectView.addSubview(modePillBadge)
@@ -198,10 +196,6 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
         effectView.addSubview(footerBar)
 
         NSLayoutConstraint.activate([
-            paletteWash.topAnchor.constraint(equalTo: effectView.topAnchor),
-            paletteWash.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
-            paletteWash.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
-            paletteWash.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
 
             magIcon.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 16.0),
             magIcon.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 15.0),
@@ -381,28 +375,20 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
         var built: [PaletteItem] = []
 
         if trimmed.isEmpty {
-            modePillBadge.style = .violet
             modePillBadge.stringValue = "RECENT"
         } else if trimmed.hasPrefix(">") {
-            modePillBadge.style = .rose
             modePillBadge.stringValue = "COMMANDS"
         } else if trimmed.hasPrefix("//") {
-            modePillBadge.style = .cyan
             modePillBadge.stringValue = "WORKSPACE"
         } else if trimmed.hasPrefix("/") {
-            modePillBadge.style = .cyan
             modePillBadge.stringValue = "IN PDF"
         } else if trimmed.hasPrefix("@") {
-            modePillBadge.style = .violet
             modePillBadge.stringValue = "OUTLINE"
         } else if trimmed.hasPrefix("#") {
-            modePillBadge.style = .amber
             modePillBadge.stringValue = "BOOKMARKS"
         } else if trimmed.lowercased().hasPrefix("p:") || trimmed.hasPrefix(":") {
-            modePillBadge.style = .violet
             modePillBadge.stringValue = "PAGE JUMP"
         } else {
-            modePillBadge.style = .violet
             modePillBadge.stringValue = "SEARCH"
         }
 
@@ -661,14 +647,7 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
         if let img = NSImage(systemSymbolName: item.iconName, accessibilityDescription: nil) {
             img.isTemplate = true
             iconView.image = img
-            switch item.action {
-            case .executeCommand:
-                iconView.contentTintColor = IridescenceDesign.accentRose
-            case .openFileAtPage, .searchInPDF:
-                iconView.contentTintColor = IridescenceDesign.accentCyan
-            default:
-                iconView.contentTintColor = IridescenceDesign.primaryViolet
-            }
+            iconView.contentTintColor = .secondaryLabelColor
         }
 
         let titleField = NSTextField(labelWithString: item.title)
@@ -689,14 +668,7 @@ public final class CommandPaletteController: NSObject, NSTableViewDataSource, NS
         subtitleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         subtitleField.translatesAutoresizingMaskIntoConstraints = false
 
-        let pillStyle: IridescentPillBadge.Style = {
-            switch item.action {
-            case .executeCommand: return .rose
-            case .openFileAtPage, .searchInPDF: return .cyan
-            default: return .violet
-            }
-        }()
-        let badgeField = IridescentPillBadge(text: item.badge, style: pillStyle)
+        let badgeField = MetadataBadge(text: item.badge, style: .neutral)
         badgeField.isHidden = item.badge.isEmpty
 
         cell.addSubview(iconView)

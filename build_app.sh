@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROFILE="${PROFILE:-release}"
-BUILD_DIR="/tmp/xcode-build"
+BUILD_DIR="${BUILD_DIR:-/tmp/iridescence-pdf-reader-build}"
 
 if [ "$PROFILE" = "release" ]; then
     echo "Building native Swift Release binary via xcodebuild..."
@@ -12,6 +12,7 @@ if [ "$PROFILE" = "release" ]; then
         ARCHS=arm64 \
         ONLY_ACTIVE_ARCH=YES \
         SYMROOT="$BUILD_DIR" \
+        OBJROOT="$BUILD_DIR/Intermediates" \
         build -quiet
     BIN_PATH="$BUILD_DIR/Release/Iridescence"
 else
@@ -22,11 +23,12 @@ else
         ARCHS=arm64 \
         ONLY_ACTIVE_ARCH=YES \
         SYMROOT="$BUILD_DIR" \
+        OBJROOT="$BUILD_DIR/Intermediates" \
         build -quiet
     BIN_PATH="$BUILD_DIR/Debug/Iridescence"
 fi
 
-APP_BUNDLE="Iridecence PDF Reader.app"
+APP_BUNDLE="${APP_BUNDLE:-Iridecence PDF Reader.app}"
 
 echo "Creating App Bundle structure ($APP_BUNDLE)..."
 rm -rf "$APP_BUNDLE/Contents/MacOS"

@@ -43,18 +43,7 @@ public enum HomeSidebarItem: Int, CaseIterable {
         }
     }
 
-    public var iconColor: NSColor {
-        switch self {
-        case .home: return IridescenceDesign.primaryViolet
-        case .continueReading: return IridescenceDesign.secondaryIndigo
-        case .recent: return IridescenceDesign.accentCyan
-        case .favorites: return IridescenceDesign.accentAmber
-        case .localFiles: return IridescenceDesign.secondaryIndigo
-        case .iCloudDrive: return IridescenceDesign.accentCyan
-        case .workspaces: return IridescenceDesign.accentRose
-        default: return .tertiaryLabelColor
-        }
-    }
+    public var iconColor: NSColor { .secondaryLabelColor }
 
     public var subtitleDescription: String {
         switch self {
@@ -81,11 +70,11 @@ public struct HomeDocumentEntry: Sendable, Equatable {
     public let lastReadTime: Double
 }
 
-/// Tinted rounded-square icon badge used in Home Screen document rows.
+/// Plain document symbol used in Home Screen rows.
 @MainActor
 private final class HomeRowIconBadgeView: NSView {
     let imageView = NSImageView()
-    var tintColor: NSColor = IridescenceDesign.primaryViolet {
+    var tintColor: NSColor = NSColor.secondaryLabelColor {
         didSet { needsDisplay = true; imageView.contentTintColor = tintColor }
     }
 
@@ -107,20 +96,11 @@ private final class HomeRowIconBadgeView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        let b = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(roundedRect: b, xRadius: 7.5, yRadius: 7.5)
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        tintColor.withAlphaComponent(isDark ? 0.20 : 0.11).setFill()
-        path.fill()
-        tintColor.withAlphaComponent(isDark ? 0.35 : 0.22).setStroke()
-        path.lineWidth = 0.75
-        path.stroke()
-    }
+
 }
 
 /// Manages the Home / Welcome Screen experience:
-/// Left spectral source-list sidebar, right iridescent hero banner card with emblem,
+/// Native source list and document list with a compact heading,
 /// search filter, `Open Folder…` and `Open PDF…` buttons, and rich document/workspace rows.
 @MainActor
 public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate, NSMenuDelegate {
@@ -154,7 +134,7 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         self.sectionSubtitleLabel = NSTextField(labelWithString: HomeSidebarItem.home.subtitleDescription)
         self.filterField = NSTextField(string: "")
         self.emptyStateView = EmptyStateView(
-            symbolName: "sparkles.rectangle.stack",
+            symbolName: "doc.richtext",
             title: "Welcome to Iridescence PDF Reader",
             subtitle: "Click “Open PDF…” or “Open Folder…” above, or drag a PDF or workspace folder into this window"
         )
@@ -168,7 +148,7 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
     }
 
     private func setupLayout() {
-        // 1. Left Sidebar with Iridescent Surface Wash
+        // 1. Native source list
         let sidebarCol = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("HomeSidebarCol"))
         sidebarCol.width = 190.0
         sidebarCol.resizingMask = .autoresizingMask
@@ -196,15 +176,9 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         sidebarEffect.blendingMode = .behindWindow
         sidebarEffect.state = .followsWindowActiveState
 
-        let sidebarWash = IridescentSurfaceWashView(role: .sidebar)
-        sidebarEffect.addSubview(sidebarWash)
         sidebarEffect.addSubview(sidebarScroll)
 
         NSLayoutConstraint.activate([
-            sidebarWash.topAnchor.constraint(equalTo: sidebarEffect.topAnchor),
-            sidebarWash.leadingAnchor.constraint(equalTo: sidebarEffect.leadingAnchor),
-            sidebarWash.trailingAnchor.constraint(equalTo: sidebarEffect.trailingAnchor),
-            sidebarWash.bottomAnchor.constraint(equalTo: sidebarEffect.bottomAnchor),
 
             sidebarScroll.topAnchor.constraint(equalTo: sidebarEffect.topAnchor, constant: 40.0),
             sidebarScroll.leadingAnchor.constraint(equalTo: sidebarEffect.leadingAnchor),
@@ -215,23 +189,24 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         let sidebarVC = NSViewController()
         sidebarVC.view = sidebarEffect
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarVC)
-        sidebarItem.canCollapse = false
+        sidebarItem.canCollapse = true
+        sidebarItem.canCollapseFromWindowResize = true
+        sidebarItem.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
         sidebarItem.minimumThickness = UIConstants.homeSidebarWidthMin
         sidebarItem.maximumThickness = UIConstants.homeSidebarWidthMax
 
-        // 2. Right Content Area with Iridescent Hero Banner Card
+        // 2. Document list and compact heading
         let rightEffect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 690, height: 600))
         rightEffect.material = .underWindowBackground
         rightEffect.blendingMode = .behindWindow
         rightEffect.state = .followsWindowActiveState
 
-        let canvasWash = IridescentSurfaceWashView(role: .welcomeCanvas)
-        rightEffect.addSubview(canvasWash)
 
-        let heroCard = IridescentSurfaceWashView(role: .welcomeHero)
-        let emblem = IridescentEmblemView(size: 38.0)
+        let heroCard = NSView()
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        let emblem = DocumentEmblemView(size: 38.0)
 
-        sectionTitleLabel.font = .systemFont(ofSize: 19.5, weight: .bold)
+        sectionTitleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
         sectionTitleLabel.textColor = .labelColor
         sectionTitleLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -253,7 +228,7 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         openFolderBtn.imagePosition = .imageLeading
         if let fImg = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Workspace Folder") {
             openFolderBtn.image = fImg
-            openFolderBtn.contentTintColor = IridescenceDesign.secondaryIndigo
+            openFolderBtn.contentTintColor = NSColor.secondaryLabelColor
         }
         openFolderBtn.translatesAutoresizingMaskIntoConstraints = false
 
@@ -261,7 +236,6 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         openPDFBtn.bezelStyle = .rounded
         openPDFBtn.keyEquivalent = "\r"
         openPDFBtn.imagePosition = .imageLeading
-        openPDFBtn.bezelColor = IridescenceDesign.primaryViolet
         if let pImg = NSImage(systemSymbolName: "doc.badge.plus", accessibilityDescription: "Open PDF Document") {
             openPDFBtn.image = pImg
         }
@@ -319,37 +293,31 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         rightEffect.addSubview(emptyStateView)
 
         NSLayoutConstraint.activate([
-            canvasWash.topAnchor.constraint(equalTo: rightEffect.topAnchor),
-            canvasWash.leadingAnchor.constraint(equalTo: rightEffect.leadingAnchor),
-            canvasWash.trailingAnchor.constraint(equalTo: rightEffect.trailingAnchor),
-            canvasWash.bottomAnchor.constraint(equalTo: rightEffect.bottomAnchor),
 
-            heroCard.topAnchor.constraint(equalTo: rightEffect.topAnchor, constant: 24.0),
-            heroCard.leadingAnchor.constraint(equalTo: rightEffect.leadingAnchor, constant: 20.0),
-            heroCard.trailingAnchor.constraint(equalTo: rightEffect.trailingAnchor, constant: -20.0),
-            heroCard.heightAnchor.constraint(equalToConstant: 70.0),
+            heroCard.topAnchor.constraint(equalTo: rightEffect.topAnchor, constant: 20),
+            heroCard.leadingAnchor.constraint(equalTo: rightEffect.leadingAnchor, constant: 20),
+            heroCard.trailingAnchor.constraint(equalTo: rightEffect.trailingAnchor, constant: -20),
+            heroCard.heightAnchor.constraint(equalToConstant: 108),
 
-            emblem.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 16.0),
-            emblem.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-            emblem.widthAnchor.constraint(equalToConstant: 38.0),
-            emblem.heightAnchor.constraint(equalToConstant: 38.0),
-
-            sectionTitleLabel.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 13.0),
-            sectionTitleLabel.leadingAnchor.constraint(equalTo: emblem.trailingAnchor, constant: 12.0),
-
-            sectionSubtitleLabel.topAnchor.constraint(equalTo: sectionTitleLabel.bottomAnchor, constant: 2.0),
+            emblem.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor),
+            emblem.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 8),
+            emblem.widthAnchor.constraint(equalToConstant: 32),
+            emblem.heightAnchor.constraint(equalToConstant: 32),
+            sectionTitleLabel.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 4),
+            sectionTitleLabel.leadingAnchor.constraint(equalTo: emblem.trailingAnchor, constant: 12),
+            sectionTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor),
+            sectionSubtitleLabel.topAnchor.constraint(equalTo: sectionTitleLabel.bottomAnchor, constant: 4),
             sectionSubtitleLabel.leadingAnchor.constraint(equalTo: sectionTitleLabel.leadingAnchor),
-            sectionSubtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: filterField.leadingAnchor, constant: -14.0),
+            sectionSubtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor),
 
-            openPDFBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-            openPDFBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -16.0),
-
-            openFolderBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-            openFolderBtn.trailingAnchor.constraint(equalTo: openPDFBtn.leadingAnchor, constant: -8.0),
-
-            filterField.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-            filterField.trailingAnchor.constraint(equalTo: openFolderBtn.leadingAnchor, constant: -10.0),
-            filterField.widthAnchor.constraint(equalToConstant: 148.0),
+            openPDFBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 68),
+            openPDFBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor),
+            openFolderBtn.centerYAnchor.constraint(equalTo: openPDFBtn.centerYAnchor),
+            openFolderBtn.leadingAnchor.constraint(equalTo: openPDFBtn.trailingAnchor, constant: 8),
+            filterField.centerYAnchor.constraint(equalTo: openPDFBtn.centerYAnchor),
+            filterField.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor),
+            filterField.leadingAnchor.constraint(greaterThanOrEqualTo: openFolderBtn.trailingAnchor, constant: 12),
+            filterField.widthAnchor.constraint(equalToConstant: 148),
 
             documentScrollView.topAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: 10.0),
             documentScrollView.leadingAnchor.constraint(equalTo: rightEffect.leadingAnchor, constant: 10.0),
@@ -532,7 +500,7 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
                 )
             default:
                 emptyStateView.updateContent(
-                    symbolName: "sparkles.rectangle.stack",
+                    symbolName: "doc.richtext",
                     title: query.isEmpty ? "Ready to Read" : "No matching documents",
                     subtitle: query.isEmpty
                         ? "Click “Open PDF…” or “Open Folder…” above, or drag a PDF or folder into this window"
@@ -581,7 +549,7 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
             let headerCell = NSView(frame: NSRect(x: 0, y: 0, width: 190, height: 26))
             let label = NSTextField(labelWithString: cat.title)
             label.font = .systemFont(ofSize: 10.0, weight: .bold)
-            label.textColor = IridescenceDesign.primaryViolet.withAlphaComponent(0.75)
+            label.textColor = .secondaryLabelColor
             label.translatesAutoresizingMaskIntoConstraints = false
             headerCell.addSubview(label)
             NSLayoutConstraint.activate([
@@ -674,13 +642,13 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         let tint: NSColor
         if entry.isWorkspaceFolder {
             sym = "folder.fill"
-            tint = IridescenceDesign.accentRose
+            tint = NSColor.secondaryLabelColor
         } else if !entry.iCloudStatus.isReadyToOpen {
             sym = "icloud.and.arrow.down"
-            tint = IridescenceDesign.accentCyan
+            tint = NSColor.secondaryLabelColor
         } else {
             sym = "doc.richtext.fill"
-            tint = IridescenceDesign.primaryViolet
+            tint = NSColor.secondaryLabelColor
         }
         iconBadge.tintColor = tint
         if let img = NSImage(systemSymbolName: sym, accessibilityDescription: nil) {
@@ -706,14 +674,8 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
         subtitleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         subtitleField.translatesAutoresizingMaskIntoConstraints = false
 
-        let badgeStyle: IridescentPillBadge.Style = {
-            if entry.isWorkspaceFolder { return .rose }
-            if entry.iCloudStatus == .failed { return .error }
-            if !entry.iCloudStatus.isReadyToOpen { return .cyan }
-            if entry.progressBadge.contains("%") { return .violet }
-            return .neutral
-        }()
-        let pillBadge = IridescentPillBadge(text: entry.progressBadge, style: badgeStyle)
+        let badgeStyle: MetadataBadge.Style = entry.iCloudStatus == .failed ? .error : .neutral
+        let pillBadge = MetadataBadge(text: entry.progressBadge, style: badgeStyle)
 
         let favBtn = NSButton(title: "", target: self, action: #selector(toggleFavoriteClicked(_:)))
         favBtn.tag = row
@@ -730,7 +692,7 @@ public final class HomeScreenController: NSObject, NSOutlineViewDataSource, NSOu
             let starName = entry.isFavorite ? "star.fill" : "star"
             if let starImg = NSImage(systemSymbolName: starName, accessibilityDescription: "Toggle Favorite") {
                 favBtn.image = starImg
-                favBtn.contentTintColor = entry.isFavorite ? IridescenceDesign.accentAmber : .tertiaryLabelColor
+                favBtn.contentTintColor = entry.isFavorite ? NSColor.secondaryLabelColor : .tertiaryLabelColor
             }
         }
 

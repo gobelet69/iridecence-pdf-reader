@@ -202,6 +202,9 @@ public final class TabBarView: NSVisualEffectView {
     public var onNewTab: (() -> Void)?
 
     private let stackView = NSStackView()
+    private let scrollView = NSScrollView()
+    private weak var manager: TabManager?
+    private var visibleCapacity = 1
     private let bottomSeparator = NSView()
     private var currentTabsSnapshot: [(title: String, path: String, isEdited: Bool)] = []
     private var currentActiveIndex: Int = 0
@@ -224,20 +227,27 @@ public final class TabBarView: NSVisualEffectView {
 
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
-        stackView.spacing = 6.0
-        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.spacing = 8.0
+        // A clipped document view prevents tab titles from contributing to the
+        // window's minimum fitting width, even during a split-view transition.
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = stackView
 
         bottomSeparator.wantsLayer = true
         bottomSeparator.layer?.backgroundColor = NSColor.separatorColor.cgColor
         bottomSeparator.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(stackView)
+        addSubview(scrollView)
         addSubview(bottomSeparator)
 
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10.0),
-            stackView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10.0),
-            stackView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            scrollView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
 
             bottomSeparator.leadingAnchor.constraint(equalTo: leadingAnchor),
             bottomSeparator.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -247,6 +257,8 @@ public final class TabBarView: NSVisualEffectView {
     }
 
     public func rebuild(from manager: TabManager) {
+        self.manager = manager
+        visibleCapacity = max(1, min(Self.maxVisiblePills, Int((bounds.width - 80) / 224)))
         for sub in stackView.arrangedSubviews {
             stackView.removeArrangedSubview(sub)
             sub.removeFromSuperview()
@@ -259,9 +271,9 @@ public final class TabBarView: NSVisualEffectView {
         guard !tabs.isEmpty else { return }
 
         // Ensure active tab is visible among the 5 pills
-        var visibleIndices = Array(0..<min(tabs.count, Self.maxVisiblePills))
-        if manager.activeIndex >= Self.maxVisiblePills && manager.activeIndex < tabs.count {
-            visibleIndices[Self.maxVisiblePills - 1] = manager.activeIndex
+        var visibleIndices = Array(0..<min(tabs.count, visibleCapacity))
+        if manager.activeIndex >= visibleCapacity && manager.activeIndex < tabs.count {
+            visibleIndices[visibleCapacity - 1] = manager.activeIndex
         }
 
         for idx in visibleIndices {
@@ -271,8 +283,8 @@ public final class TabBarView: NSVisualEffectView {
             stackView.addArrangedSubview(pill)
         }
 
-        if tabs.count > Self.maxVisiblePills {
-            let overflowCount = tabs.count - Self.maxVisiblePills
+        if tabs.count > visibleCapacity {
+            let overflowCount = tabs.count - visibleCapacity
             let overflowBtn = NSButton(title: "+\(overflowCount) ▾", target: self, action: #selector(overflowClicked(_:)))
             overflowBtn.bezelStyle = .recessed
             overflowBtn.isBordered = true
@@ -289,6 +301,13 @@ public final class TabBarView: NSVisualEffectView {
         }
         plusBtn.toolTip = "Open PDF in New Tab (⌘O)"
         stackView.addArrangedSubview(plusBtn)
+        stackView.setFrameSize(NSSize(width: stackView.fittingSize.width, height: 28))
+    }
+
+    public override func layout() {
+        super.layout()
+        let capacity = max(1, min(Self.maxVisiblePills, Int((bounds.width - 80) / 224)))
+        if capacity != visibleCapacity, let manager { rebuild(from: manager) }
     }
 
     private func buildTabPill(index: Int, title: String, isEdited: Bool, isSelected: Bool) -> NSView {
@@ -306,7 +325,7 @@ public final class TabBarView: NSVisualEffectView {
         if let dImg = NSImage(systemSymbolName: isEdited ? "doc.badge.gearshape.fill" : "doc.richtext.fill", accessibilityDescription: nil) {
             dImg.isTemplate = true
             docIcon.image = dImg
-            docIcon.contentTintColor = isSelected ? IridescenceDesign.primaryViolet : .tertiaryLabelColor
+            docIcon.contentTintColor = isSelected ? .labelColor : .secondaryLabelColor
         }
 
         let displayTitle = isEdited ? "● \(title)" : title
@@ -317,6 +336,8 @@ public final class TabBarView: NSVisualEffectView {
         titleBtn.contentTintColor = isSelected ? .labelColor : .secondaryLabelColor
         titleBtn.lineBreakMode = .byTruncatingTail
         titleBtn.translatesAutoresizingMaskIntoConstraints = false
+        titleBtn.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titleBtn.toolTip = title
 
         let closeBtn = NSButton(title: "", target: self, action: #selector(closePillClicked(_:)))
         closeBtn.tag = index
@@ -325,7 +346,7 @@ public final class TabBarView: NSVisualEffectView {
             let cfg = NSImage.SymbolConfiguration(pointSize: 9.0, weight: .bold)
             closeBtn.image = xImg.withSymbolConfiguration(cfg) ?? xImg
         }
-        closeBtn.contentTintColor = isSelected ? IridescenceDesign.primaryViolet : .secondaryLabelColor
+        closeBtn.contentTintColor = .secondaryLabelColor
         closeBtn.toolTip = "Close Tab (⌘W)"
         closeBtn.translatesAutoresizingMaskIntoConstraints = false
 
@@ -336,7 +357,7 @@ public final class TabBarView: NSVisualEffectView {
         NSLayoutConstraint.activate([
             pill.heightAnchor.constraint(equalToConstant: 26.0),
             pill.widthAnchor.constraint(greaterThanOrEqualToConstant: 108.0),
-            pill.widthAnchor.constraint(lessThanOrEqualToConstant: 215.0),
+            pill.widthAnchor.constraint(lessThanOrEqualToConstant: 216.0),
 
             docIcon.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 8.0),
             docIcon.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
@@ -460,26 +481,11 @@ private final class TabPillContainerView: NSView {
         let b = bounds.insetBy(dx: 0.5, dy: 0.5)
         guard b.width > 4, b.height > 4 else { return }
         let path = NSBezierPath(roundedRect: b, xRadius: UIConstants.radiusRow, yRadius: UIConstants.radiusRow)
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-
         if isSelected {
-            let c1 = IridescenceDesign.primaryViolet.withAlphaComponent(isDark ? 0.28 : 0.16)
-            let c2 = IridescenceDesign.secondaryIndigo.withAlphaComponent(isDark ? 0.22 : 0.12)
-            let c3 = IridescenceDesign.accentCyan.withAlphaComponent(isDark ? 0.20 : 0.11)
-            if let grad = NSGradient(colors: [c1, c2, c3], atLocations: [0.0, 0.55, 1.0], colorSpace: .sRGB) {
-                grad.draw(in: path, angle: 15.0)
-            } else {
-                c1.setFill()
-                path.fill()
-            }
-            IridescenceDesign.primaryViolet.withAlphaComponent(isDark ? 0.55 : 0.40).setStroke()
-            path.lineWidth = 1.0
-            path.stroke()
-        } else {
-            NSColor.labelColor.withAlphaComponent(isDark ? 0.05 : 0.035).setFill()
+            NSColor.controlBackgroundColor.setFill()
             path.fill()
-            NSColor.separatorColor.withAlphaComponent(0.38).setStroke()
-            path.lineWidth = 0.5
+            NSColor.separatorColor.setStroke()
+            path.lineWidth = 1
             path.stroke()
         }
     }

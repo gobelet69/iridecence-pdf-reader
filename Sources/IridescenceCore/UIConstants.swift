@@ -18,7 +18,7 @@ public enum UIConstants {
     public static let homeSidebarWidthDefault: CGFloat = 210.0
     public static let homeSidebarWidthMax: CGFloat = 280.0
 
-    public static let readerCenterMinWidth: CGFloat = 420.0
+    public static let readerCenterMinWidth: CGFloat = 320.0
     public static let responsiveCollapseInspectorWidth: CGFloat = 860.0
     public static let responsiveCollapseSidebarWidth: CGFloat = 680.0
 

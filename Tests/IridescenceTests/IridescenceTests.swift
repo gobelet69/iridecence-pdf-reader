@@ -8,6 +8,84 @@ import XCTest
 @MainActor
 final class IridescenceTests: XCTestCase {
 
+    func testWindowGeometryFitsDisplaysSmallerThanPreferredMinimum() {
+        for visible in [NSRect(x: -640, y: 30, width: 640, height: 450),
+                        NSRect(x: 1440, y: -300, width: 720, height: 500)] {
+            for kind: WindowKind in [.home, .reader, .palette, .utility] {
+                let frame = WindowGeometry.sanitizeRect(NSRect(x: 5000, y: 1000, width: 1600, height: 1000), for: kind, in: visible)
+                XCTAssertTrue(visible.contains(frame), "\(kind): \(frame) exceeds \(visible)")
+            }
+        }
+    }
+
+    func testReaderTransitionsAndSidebarsPreserveWindowFrameAndFitPDF() throws {
+        _ = NSApplication.shared
+        let app = AppDelegate()
+        SettingsManager.shared.registerDefaults()
+        app.buildMainWindowAndViews()
+        defer { app.window.close() }
+        let path = "/tmp/reader-window-regression-\(UUID().uuidString).pdf"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        VisualQAHarness.ensureRichTestPDF(at: path, forceSynthetic: true)
+        let frame = WindowGeometry.sanitizeRect(NSRect(x: 100, y: 100, width: 800, height: 600), for: .home, in: WindowGeometry.activeVisibleFrame())
+        app.window.setFrame(frame, display: true)
+        app.openFile(at: URL(fileURLWithPath: path))
+        VisualQAHarness.pumpRunLoop(0.1)
+        XCTAssertEqual(app.window.frame, frame, "Opening a document must retain the chosen frame")
+        if !app.inspectorSplitItem.isCollapsed { app.toggleRightSidebar(nil) }
+        if !app.explorerSplitItem.isCollapsed { app.toggleLeftSidebar(nil) }
+        VisualQAHarness.pumpRunLoop(0.3)
+        let before = app.window.frame
+        app.pdfView.autoScales = false
+        app.pdfView.scaleFactor = 3
+        app.toggleLeftSidebar(nil)
+        app.toggleRightSidebar(nil)
+        VisualQAHarness.pumpRunLoop(0.4)
+        XCTAssertEqual(app.window.frame, before)
+        XCTAssertFalse(app.explorerSplitItem.isCollapsed)
+        XCTAssertFalse(app.inspectorSplitItem.isCollapsed)
+        XCTAssertTrue(app.pdfView.autoScales)
+        XCTAssertLessThan(app.pdfView.scaleFactor, 3)
+        // Several long titles must not become an implicit minimum window width.
+        for number in 0..<5 {
+            let extra = URL(fileURLWithPath: "/tmp/reader-long-title-\(UUID().uuidString)-\(number)-protocol-verification.pdf")
+            try FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: extra)
+            app.openFile(at: extra)
+            try FileManager.default.removeItem(at: extra)
+        }
+        app.window.setFrame(before, display: true)
+        if app.explorerSplitItem.isCollapsed { app.toggleLeftSidebar(nil) }
+        app.toggleLeftSidebar(nil)
+        app.toggleLeftSidebar(nil)
+        VisualQAHarness.pumpRunLoop(0.3)
+        XCTAssertEqual(app.window.frame, before, "Long tabs must overflow inside the window")
+        func checkTabControls(in view: NSView) {
+            for child in view.subviews where !child.isHidden {
+                if child is NSButton {
+                    let rect = app.tabBarView.convert(child.bounds, from: child)
+                    XCTAssertTrue(app.tabBarView.bounds.insetBy(dx: -1, dy: -1).contains(rect), "Tab control clipped: \(rect)")
+                }
+                checkTabControls(in: child)
+            }
+        }
+        checkTabControls(in: app.tabBarView)
+        app.toggleFocusMode(nil)
+        app.toggleFocusMode(nil)
+        app.findInDocument(nil)
+        VisualQAHarness.pumpRunLoop(0.2)
+        XCTAssertEqual(app.window.frame, before)
+        let smallFrame = NSRect(x: before.minX, y: before.minY, width: 616, height: 480)
+        app.window.minSize = smallFrame.size
+        app.window.setFrame(smallFrame, display: true)
+        if !app.explorerSplitItem.isCollapsed { app.toggleLeftSidebar(nil) }
+        if app.inspectorSplitItem.isCollapsed { app.toggleRightSidebar(nil) }
+        app.toggleLeftSidebar(nil)
+        VisualQAHarness.pumpRunLoop(0.2)
+        XCTAssertEqual(app.window.frame, smallFrame)
+        XCTAssertFalse(app.explorerSplitItem.isCollapsed)
+        XCTAssertTrue(app.inspectorSplitItem.isCollapsed)
+    }
+
     // MARK: - 1. File Identity & Symlink Canonicalization Tests
 
     func testCanonicalPathStripsPrivatePrefixAndNormalizes() {
@@ -543,26 +621,15 @@ final class IridescenceTests: XCTestCase {
         XCTAssertNotNil(cell)
     }
 
-    // MARK: - 16. Iridescence Design System Tokens & Surface Washes
-
-    func testIridescentDesignTokensAndSurfaces() {
-        XCTAssertNotNil(IridescenceDesign.primaryViolet)
-        XCTAssertNotNil(IridescenceDesign.secondaryIndigo)
-        XCTAssertNotNil(IridescenceDesign.accentCyan)
-        XCTAssertNotNil(IridescenceDesign.accentRose)
-        XCTAssertNotNil(IridescenceDesign.accentAmber)
-
-        let washSidebar = IridescentSurfaceWashView(role: .sidebar)
-        XCTAssertEqual(washSidebar.role, .sidebar)
-
-        let washHero = IridescentSurfaceWashView(role: .welcomeHero)
-        XCTAssertEqual(washHero.role, .welcomeHero)
-
-        let emblem = IridescentEmblemView(size: 64.0)
-        XCTAssertNotNil(emblem)
-
-        let pill = IridescentPillBadge(text: "RECENT", style: .violet)
-        XCTAssertEqual(pill.stringValue, "RECENT")
-        XCTAssertEqual(pill.style, .violet)
+    func testMetadataRemainsReadableAndUpdatesWithoutDecorativeColor() {
+        let badge = MetadataBadge(text: "12 pages")
+        XCTAssertEqual(badge.label.textColor, .secondaryLabelColor)
+        badge.style = .error
+        XCTAssertEqual(badge.label.textColor, .systemRed)
+        badge.stringValue = ""
+        XCTAssertTrue(badge.isHidden)
+        badge.stringValue = "Ready"
+        XCTAssertFalse(badge.isHidden)
+        XCTAssertEqual(badge.stringValue, "Ready")
     }
 }

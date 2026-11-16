@@ -59,7 +59,7 @@ public enum VisualQAHarness {
     public static func ensureRichTestPDF(
         at targetPath: String,
         title: String = "Cryptanalysis & Protocol Verification",
-        forceSynthetic: Bool = false
+        forceSynthetic: Bool = true
     ) {
         let dir = (targetPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -357,13 +357,61 @@ public enum VisualQAHarness {
         pumpRunLoop(0.18)
         captureWindowToPNG(window, outPath: "\(outDir)/22-fullscreen-presentation-return.png")
 
-        print("[VISUAL_QA_DONE] Completed all 22+ Swift Visual QA screenshots in \(outDir)")
+        verifyWindowLayout(app: app, outDir: outDir)
+        print("[VISUAL_QA_DONE] Completed all Swift Visual QA screenshots in \(outDir)")
         if ProcessInfo.processInfo.environment["IRIDESCENCE_QA_EXIT"] != nil {
             exit(0)
         }
     }
 
     // MARK: - Canonical 19-Screenshot Suite (`scripts/visual_qa.sh` compatibility)
+
+    /// Exercise actual AppKit fitting and PDFKit zoom at the right edge of the
+    /// screen, where an implicit expansion used to push the inspector offscreen.
+    private static func verifyWindowLayout(app: AppDelegate, outDir: String) {
+        guard let window = app.window else { return }
+        let visible = WindowGeometry.activeVisibleFrame(for: window)
+        var results: [[String: Any]] = []
+        var failures: [String] = []
+        for dark in [false, true] {
+            setDarkMode(dark)
+            let theme = dark ? "dark" : "light"
+            for width: CGFloat in [800, 1024, min(1200, visible.width - 24)] {
+                let frame = WindowGeometry.sanitizeRect(
+                    NSRect(x: visible.maxX - width, y: visible.minY + 24, width: width, height: 600),
+                    for: .reader, in: visible)
+                window.setFrame(frame, display: true)
+                if !app.explorerSplitItem.isCollapsed { app.toggleLeftSidebar(nil) }
+                if !app.inspectorSplitItem.isCollapsed { app.toggleRightSidebar(nil) }
+                pumpRunLoop(0.1)
+                let page = app.pdfView.currentPage
+                app.pdfView.autoScales = false
+                app.pdfView.scaleFactor = 3
+                app.toggleLeftSidebar(nil)
+                app.toggleRightSidebar(nil)
+                pumpRunLoop(0.2)
+                let name = "layout-\(Int(width))-\(theme)"
+                let sameFrame = window.frame == frame
+                let fits = visible.contains(window.frame)
+                let refitted = app.pdfView.autoScales && app.pdfView.scaleFactor < 3
+                let samePage = app.pdfView.currentPage === page
+                if !sameFrame || !fits || !refitted || !samePage { failures.append(name) }
+                results.append(["state": name, "sameFrame": sameFrame, "onscreen": fits,
+                                "refitted": refitted, "samePage": samePage,
+                                "zoom": app.pdfView.scaleFactor,
+                                "readerWidth": app.pdfView.bounds.width])
+                app.switchSidebarToIndex(0)
+                captureWindowToPNG(window, outPath: "\(outDir)/\(name).png")
+            }
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: ["checks": results, "failures": failures], options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: "\(outDir)/window-layout.json"))
+        }
+        if !failures.isEmpty {
+            print("[WINDOW_LAYOUT_FAILED] \(failures)")
+            exit(1)
+        }
+    }
 
     public static func runCanonical19VisualQA(app: AppDelegate) {
         let passName = ProcessInfo.processInfo.environment["IRIDESCENCE_VISUAL_QA_PASS"] ?? "pass-01"
