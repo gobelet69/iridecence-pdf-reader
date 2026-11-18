@@ -151,8 +151,8 @@ public enum VisualQAHarness {
             ?? "/tmp/iridescence-swift-visual-qa"
         try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
-        let fixtureDir = "/tmp/iridescence-swift-qa-fixtures"
-        try? FileManager.default.removeItem(atPath: fixtureDir)
+        let fixtureDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("iridescence-swift-qa-\(UUID().uuidString)").path
         let wsDir = "\(fixtureDir)/Workspace"
         try? FileManager.default.createDirectory(atPath: "\(wsDir)/Cryptography", withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(atPath: "\(wsDir)/Protocols", withIntermediateDirectories: true)
@@ -170,6 +170,8 @@ public enum VisualQAHarness {
 
         // 1. Home Light (Empty / Clean)
         UserDefaults.standard.removeObject(forKey: SettingsKeys.recentFiles)
+        UserDefaults.standard.removeObject(forKey: SettingsKeys.recentItems)
+        UserDefaults.standard.removeObject(forKey: SettingsKeys.favoriteFiles)
         UserDefaults.standard.removeObject(forKey: SettingsKeys.recentWorkspaces)
         setDarkMode(false)
         app.showHomeScreen(nil)

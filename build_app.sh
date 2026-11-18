@@ -61,9 +61,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.0.1</string>
+    <string>2.0.2</string>
     <key>CFBundleVersion</key>
-    <string>201</string>
+    <string>202</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
@@ -106,4 +106,4 @@ PLIST
 echo "Ad-hoc signing $APP_BUNDLE..."
 codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null 2>&1 || true
 
-echo "Done! Built 100% Native Swift '$APP_BUNDLE' (v2.0.1)."
+echo "Done! Built 100% Native Swift '$APP_BUNDLE' (v2.0.2)."
